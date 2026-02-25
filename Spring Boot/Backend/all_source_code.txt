@@ -1,0 +1,4061 @@
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\aop\EmailAudit.java
+--------------------------------------------------
+package com.example.aop;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface EmailAudit {
+    String value();
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\aop\EmailAuditAspect.java
+--------------------------------------------------
+package com.example.aop;
+
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+public class EmailAuditAspect {
+   
+	@Before("@annotation(emailAudit)")
+	public void beforeEmail(JoinPoint joinPoint,EmailAudit emailAudit) {
+		System.out.println(
+				"[EMAIL START] Type: "+emailAudit.value()+
+				" | Method: " +joinPoint.getSignature().getName()
+				);
+	}
+	
+	@AfterReturning("@annotation(emailAudit)")
+    public void afterEmail(EmailAudit emailAudit ) {
+        System.out.println(
+            "[EMAIL SUCCESS] Type: " + emailAudit.value());
+    }
+	
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\aop\WelcomeControllerTimingAspect.java
+--------------------------------------------------
+package com.example.aop;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+public class WelcomeControllerTimingAspect {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(WelcomeControllerTimingAspect.class);
+
+    private final Map<String, Long> executionHistory = new ConcurrentHashMap<>();
+
+    // 🔥 ONLY WelcomeController methods
+    @Around("execution(* com.example.controller.WelcomeController.*(..))")
+    public Object logFirstVsNextApiCall(ProceedingJoinPoint joinPoint) throws Throwable {
+
+        String methodName = joinPoint.getSignature().toShortString();
+
+        long start = System.nanoTime();
+        Object result = joinPoint.proceed();
+        long end = System.nanoTime();
+
+        long timeMs = (end - start) / 1_000_000;
+
+        if (!executionHistory.containsKey(methodName)) {
+            log.info("🟡 FIRST API call {} took {} ms", methodName, timeMs);
+        } else {
+            long prev = executionHistory.get(methodName);
+            log.info("🟢 NEXT API call {} took {} ms (previous: {} ms)",
+                    methodName, timeMs, prev);
+        }
+
+        executionHistory.put(methodName, timeMs);
+
+        return result;
+    }
+}
+	
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\auth\GoogleOAuthSuccessHandler.java
+--------------------------------------------------
+package com.example.auth;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.stereotype.Component;
+
+import com.example.repository.UserRepository;
+
+import java.io.IOException;
+@Component
+public class GoogleOAuthSuccessHandler implements AuthenticationSuccessHandler {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Override
+    public void onAuthenticationSuccess(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Authentication authentication
+    ) throws IOException {
+
+        OAuth2User user = (OAuth2User) authentication.getPrincipal();
+        String email = user.getAttribute("email");
+
+        boolean exists = userRepository.findByEmail(email).isPresent();
+
+        if (exists) {
+            String token = jwtUtil.generateToken(email);
+            response.sendRedirect(
+                "http://localhost:5173/oauth2/redirect?token=" + token
+            );
+        } else {
+            response.sendRedirect(
+                "http://localhost:5173/register?email=" + email
+            );
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\auth\JwtAuthFilter.java
+--------------------------------------------------
+package com.example.auth;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+public class JwtAuthFilter extends OncePerRequestFilter {
+
+    private final JwtUtil jwtUtil;
+
+    public JwtAuthFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    // ✅ Skip JWT filter for public endpoints
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.startsWith("/api/registration")
+                || path.startsWith("/auth/login")         
+                || path.startsWith("/login/oauth2")
+                || path.contains("oauth2");
+    }
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain chain
+    ) throws ServletException, IOException {
+
+        String authHeader = request.getHeader("Authorization");
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+
+            String token = authHeader.substring(7);
+
+            if (jwtUtil.isTokenValid(token)) {
+                String username = jwtUtil.extractUsername(token);
+
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(username, null, null);
+
+                SecurityContextHolder.getContext()
+                        .setAuthentication(authentication);
+            }
+        }
+
+        chain.doFilter(request, response);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\auth\JwtUtil.java
+--------------------------------------------------
+package com.example.auth;
+
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.security.Key;
+import java.util.Date;
+
+@Component
+public class JwtUtil {
+
+	  private final Key secretKey;
+
+	    public JwtUtil(@Value("${jwt.secret}") String key) {
+	        this.secretKey = Keys.hmacShaKeyFor(key.getBytes());
+	    }
+
+    public String generateToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuer("VehicleConfigAuth")
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 60 * 60 * 1000)) // 1 hour
+                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String extractUsername(String token) {
+        return getClaims(token).getSubject();
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            getClaims(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Claims getClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(secretKey)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+}
+
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\auth\SecurityConfig.java
+--------------------------------------------------
+package com.example.auth;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+
+@Configuration
+public class SecurityConfig {
+
+    private final JwtAuthFilter jwtFilter;
+    private final GoogleOAuthSuccessHandler googleOAuthSuccessHandler;
+
+    public SecurityConfig(JwtAuthFilter jwtFilter, GoogleOAuthSuccessHandler googleOAuthSuccessHandler) {
+        this.jwtFilter = jwtFilter;
+        this.googleOAuthSuccessHandler = googleOAuthSuccessHandler;
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+
+        http
+        
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(sess ->
+                sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            .authorizeHttpRequests(auth -> auth
+            	    .requestMatchers(
+            	        "/actuator/**",
+            	        "/auth/login",
+            	        "/api/registration",
+            	        "/api/registration/**",
+            	        "/oauth2/**",
+            	        "/login/oauth2/**"
+            	    ).permitAll()
+            	    .requestMatchers(
+            	    		"/vehicle/**",
+            	    		"/vehicaldetail/**",
+                            "/api/welcome/**",
+                            "/api/alternate-component/**",
+                            "/api/default-config/**",
+                            "/api/invoice/**"
+            	    		 ).permitAll()
+            	    .requestMatchers("/api/user/profile").permitAll()
+            	    .requestMatchers("/api/invoice/**").authenticated()
+            	    .anyRequest().authenticated()
+            	)
+
+            .oauth2Login(oauth -> oauth
+                    .successHandler(googleOAuthSuccessHandler)
+                )
+            
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+    
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**")
+                    .allowedOrigins("http://localhost:5173")
+                    .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                    .allowedHeaders("*")
+                    .allowCredentials(true);
+            }
+        };
+    }
+
+    
+    @Bean
+    public AuthenticationManager authenticationManager() {
+        return authentication -> authentication;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\config\PasswordConfig.java
+--------------------------------------------------
+package com.example.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class PasswordConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(10);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\AlternateComponentController.java
+--------------------------------------------------
+package com.example.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.dto.AlternateComponentSaveDTO;
+import com.example.service.AlternateComponentManager;
+
+@RestController
+@RequestMapping("/api/alternate-component")
+public class AlternateComponentController {
+
+    @Autowired
+    private AlternateComponentManager service;
+
+    @PostMapping("/save")
+    public ResponseEntity<String> saveAlternateComponent(
+            @RequestBody AlternateComponentSaveDTO dto) {
+
+        System.out.println("DTO = " + dto.getModelId());
+        System.out.println("Components = " + dto.getComponents());
+
+        service.saveAlternateComponents(dto);
+        return ResponseEntity.ok("Alternate components saved successfully");
+    }
+
+
+}
+
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\DefaultConfigController.java
+--------------------------------------------------
+package com.example.controller;
+
+import com.example.dto.DefaultConfigResponseDTO;
+import com.example.dto.DefaultConfigurationDTO;
+import com.example.service.DefaultConfigManager;
+import com.example.service.DefaultConfigService;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/default-config")
+@CrossOrigin
+public class DefaultConfigController {
+
+    private final DefaultConfigService service;
+
+    public DefaultConfigController(DefaultConfigService service) {
+        this.service = service;
+    }
+    
+    @Autowired
+    private DefaultConfigManager manager;
+
+    @GetMapping("/{modelId}")
+    public DefaultConfigResponseDTO getDefaultConfig(
+            @PathVariable Integer modelId,
+            @RequestParam(defaultValue = "1") Integer qty
+    ) {
+        return service.getDefaultConfiguration(modelId, qty);
+        
+    }
+    
+    @GetMapping("/conf/{modelId}")
+    public ResponseEntity<?> getDefault(@PathVariable Integer modelId){
+    	List<DefaultConfigurationDTO> list=manager.getDefaultConfiguration(modelId);
+    	
+    	return ResponseEntity.ok(list);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\InvoiceController.java
+--------------------------------------------------
+package com.example.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.dto.InvoiceRequestDTO;
+import com.example.service.Invoicemanager;
+
+@RestController
+@RequestMapping("/api/invoice")
+public class InvoiceController {
+
+    @Autowired
+    private Invoicemanager invoiceService;
+
+    @PostMapping("/confirm")
+    public ResponseEntity<String> confirmOrder(
+            @RequestBody InvoiceRequestDTO dto,
+            Authentication authentication
+    ) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new RuntimeException("User not authenticated");
+        }
+
+        String username = authentication.getName(); // ✅ SAFE
+        invoiceService.generateInvoice(dto, username);
+
+        return ResponseEntity.ok("Invoice generated");
+    }
+
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\RegisterController.java
+--------------------------------------------------
+package com.example.controller;
+
+import com.example.models.User;
+import com.example.service.UserService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/registration")
+@CrossOrigin(origins = "http://localhost:5173") 
+public class RegisterController {
+
+    private final UserService service;
+
+    public RegisterController(UserService service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    public List<User> getAll() {
+        return service.getAllRegistrations();
+    }
+
+    @PostMapping
+    public User save(@RequestBody User user) {
+        return service.saveRegistration(user);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\UserController.java
+--------------------------------------------------
+package com.example.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+//import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.dto.LoginRequest;
+import com.example.service.UserManager;
+
+
+@RestController
+@RequestMapping("/auth")
+public class UserController {
+
+	@Autowired
+	private UserManager manager;
+	
+	@PostMapping("/login")
+	public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+		
+		try 
+		{
+			String token=manager.login(request);	
+			return ResponseEntity.ok(token);
+		}
+		catch(RuntimeException ex) {
+			
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
+		}
+	}
+	
+//	@GetMapping("/oauth")
+//	public ResponseEntity<?> outh(@AuthenticationPrincipal OAuth2User user){
+//		
+//		String email=user.getAttribute("email");
+//		String token=manager.Outh(email);
+//		
+//		return ResponseEntity.ok(token);
+//		
+//	}
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\VehicleConfigController.java
+--------------------------------------------------
+package com.example.controller;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.dto.ComponentDropdownDto;
+import com.example.service.VehicleManager;
+
+@RestController
+@RequestMapping("/vehicle")
+@CrossOrigin(origins = "http://localhost:5173")
+public class VehicleConfigController {
+	
+	@Autowired
+	VehicleManager manager;
+	
+	@GetMapping("/{modelId}/standard")
+    public ResponseEntity<List<ComponentDropdownDto>> getStandardComponents(
+            @PathVariable Integer modelId) {
+
+        List<ComponentDropdownDto> list=manager.getConfigurableComponents(modelId, "S");
+        
+        return ResponseEntity.ok(list);
+    }
+
+ 
+    @GetMapping("/{modelId}/interior")
+    public ResponseEntity<List<ComponentDropdownDto>> getInteriorComponents(
+            @PathVariable Integer modelId) {
+
+    	List<ComponentDropdownDto> list=manager.getConfigurableComponents(modelId, "I");
+    	return ResponseEntity.ok(list);
+    	
+    }
+
+    
+    @GetMapping("/{modelId}/exterior")
+    public ResponseEntity<List<ComponentDropdownDto>> getExteriorComponents(
+            @PathVariable Integer modelId) {
+
+    	List<ComponentDropdownDto> list=manager.getConfigurableComponents(modelId, "E");
+    	return ResponseEntity.ok(list);
+    	
+    }
+
+    @GetMapping("/{modelId}/accessories")
+    public ResponseEntity<List<ComponentDropdownDto>> getAccessoryComponents(
+            @PathVariable Integer modelId) {
+
+    	List<ComponentDropdownDto> list=manager.getConfigurableComponents(modelId, "C");
+    	
+    	return ResponseEntity.ok(list);
+    }
+	
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\VehicleDetailController.java
+--------------------------------------------------
+package com.example.controller;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.dto.IsConfigurationDTO;
+import com.example.service.VehicalDetails;
+
+@RestController
+@RequestMapping("/vehicaldetail")
+public class VehicleDetailController {
+   
+	@Autowired
+	private VehicalDetails vehicaldetail;
+	
+	@PostMapping("/config")
+	public ResponseEntity<?>  ConfigurableComponent(@RequestBody IsConfigurationDTO dto){
+		List<String> list= vehicaldetail.isConfigurable(dto.getModelId(),dto.getCompType());
+		return ResponseEntity.ok(list);
+	}
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\controller\WelcomeController.java
+--------------------------------------------------
+package com.example.controller;
+
+import com.example.dto.ManufacturerDTO;
+import com.example.dto.ModelDTO;
+import com.example.dto.SegmentDTO;
+import com.example.models.Manufacturer;
+import com.example.models.Segment;
+import com.example.service.WelcomeService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/welcome")
+@CrossOrigin
+public class WelcomeController {
+
+    private final WelcomeService welcomeService;
+
+    public WelcomeController(WelcomeService welcomeService) {
+        this.welcomeService = welcomeService;
+    }
+
+    @GetMapping("/segments")
+    public List<SegmentDTO> getSegments() {
+        return welcomeService.getAllSegments();
+    }
+
+    @GetMapping("/manufacturers/{segId}")
+    public List<ManufacturerDTO> getManufacturers(@PathVariable Integer segId) {
+        return welcomeService.getManufacturersBySegment(segId);
+    }
+
+    @GetMapping("/models")
+    public List<ModelDTO> getModels(
+            @RequestParam Integer segId,
+            @RequestParam Integer mfgId) {
+        return welcomeService.getModels(segId, mfgId);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\AlternateComponentDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class AlternateComponentDTO {
+
+	 private Integer compId;      
+	    private Integer altCompId;   
+
+	    public Integer getCompId() {
+	        return compId;
+	    }
+
+	    public void setCompId(Integer compId) {
+	        this.compId = compId;
+	    }
+
+	    public Integer getAltCompId() {
+	        return altCompId;
+	    }
+
+	    public void setAltCompId(Integer altCompId) {
+	        this.altCompId = altCompId;
+	    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\AlternateComponentSaveDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class AlternateComponentSaveDTO {
+
+	private Integer modelId;
+    private List<AlternateComponentDTO> components;
+
+    public Integer getModelId() {
+        return modelId;
+    }
+
+    public void setModelId(Integer modelId) {
+        this.modelId = modelId;
+    }
+
+    public List<AlternateComponentDTO> getComponents() {
+        return components;
+    }
+
+    public void setComponents(List<AlternateComponentDTO> components) {
+        this.components = components;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\ComponentDropdownDto.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class ComponentDropdownDto {
+
+    private Integer baseCompId;      // ✅ REQUIRED
+    private String componentName;
+    private List<OptionDto> options;
+
+    // ✅ New constructor (recommended)
+    public ComponentDropdownDto(Integer baseCompId, String componentName, List<OptionDto> options) {
+        this.baseCompId = baseCompId;
+        this.componentName = componentName;
+        this.options = options;
+    }
+
+    // ✅ Optional: keep no-arg constructor if Jackson needs it
+    public ComponentDropdownDto() {
+    }
+
+    public Integer getBaseCompId() {
+        return baseCompId;
+    }
+
+    public void setBaseCompId(Integer baseCompId) {
+        this.baseCompId = baseCompId;
+    }
+
+    public String getComponentName() {
+        return componentName;
+    }
+
+    public void setComponentName(String componentName) {
+        this.componentName = componentName;
+    }
+
+    public List<OptionDto> getOptions() {
+        return options;
+    }
+
+    public void setOptions(List<OptionDto> options) {
+        this.options = options;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\ComponentDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class ComponentDTO {
+
+    private Integer id;
+    private String name;
+
+    public ComponentDTO(Integer id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public Integer getId() { return id; }
+    public String getName() { return name; }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\DefaultConfigDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class DefaultConfigDTO {
+
+    private Integer modelId;
+    private String modelName;
+    private String segmentName;
+    private String manufacturerName;
+
+    private Double basePrice;
+    private Integer minQuantity;
+
+    private List<ComponentDTO> defaultComponents;
+
+    private Double totalPrice;
+
+    public DefaultConfigDTO() {
+    }
+
+    public DefaultConfigDTO(Integer modelId,
+                            String modelName,
+                            String segmentName,
+                            String manufacturerName,
+                            Double basePrice,
+                            Integer minQuantity,
+                            List<ComponentDTO> defaultComponents,
+                            Double totalPrice) {
+        this.modelId = modelId;
+        this.modelName = modelName;
+        this.segmentName = segmentName;
+        this.manufacturerName = manufacturerName;
+        this.basePrice = basePrice;
+        this.minQuantity = minQuantity;
+        this.defaultComponents = defaultComponents;
+        this.totalPrice = totalPrice;
+    }
+
+    public Integer getModelId() {
+        return modelId;
+    }
+
+    public void setModelId(Integer modelId) {
+        this.modelId = modelId;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
+    }
+
+    public String getSegmentName() {
+        return segmentName;
+    }
+
+    public void setSegmentName(String segmentName) {
+        this.segmentName = segmentName;
+    }
+
+    public String getManufacturerName() {
+        return manufacturerName;
+    }
+
+    public void setManufacturerName(String manufacturerName) {
+        this.manufacturerName = manufacturerName;
+    }
+
+    public Double getBasePrice() {
+        return basePrice;
+    }
+
+    public void setBasePrice(Double basePrice) {
+        this.basePrice = basePrice;
+    }
+
+    public Integer getMinQuantity() {
+        return minQuantity;
+    }
+
+    public void setMinQuantity(Integer minQuantity) {
+        this.minQuantity = minQuantity;
+    }
+
+    public List<ComponentDTO> getDefaultComponents() {
+        return defaultComponents;
+    }
+
+    public void setDefaultComponents(List<ComponentDTO> defaultComponents) {
+        this.defaultComponents = defaultComponents;
+    }
+
+    public Double getTotalPrice() {
+        return totalPrice;
+    }
+
+    public void setTotalPrice(Double totalPrice) {
+        this.totalPrice = totalPrice;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\DefaultConfigResponseDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class DefaultConfigResponseDTO {
+
+    private Integer modelId;
+    private String modelName;
+    private String segmentName;
+    private String manufacturerName;
+
+    private Double basePrice;
+    private Integer minQuantity;
+    private Double totalPrice;
+    
+    private String imgPath;
+
+    private List<ComponentDTO> defaultComponents;
+    
+
+    public DefaultConfigResponseDTO(
+            Integer modelId,
+            String modelName,
+            String segmentName,
+            String manufacturerName,
+            Double basePrice,
+            Integer minQuantity,
+            Double totalPrice,
+            String imgPath, 
+            List<ComponentDTO> defaultComponents
+    ) {
+        this.modelId = modelId;
+        this.modelName = modelName;
+        this.segmentName = segmentName;
+        this.manufacturerName = manufacturerName;
+        this.basePrice = basePrice;
+        this.minQuantity = minQuantity;
+        this.totalPrice = totalPrice;
+        this.imgPath = imgPath;            
+        this.defaultComponents = defaultComponents;
+    }
+
+    public Integer getModelId() { return modelId; }
+    public String getModelName() { return modelName; }
+    public String getSegmentName() { return segmentName; }
+    public String getManufacturerName() { return manufacturerName; }
+    public Double getBasePrice() { return basePrice; }
+    public Integer getMinQuantity() { return minQuantity; }
+    public Double getTotalPrice() { return totalPrice; }
+    public String getImgPath() {
+        return imgPath;
+    }
+
+    public List<ComponentDTO> getDefaultComponents() { return defaultComponents; }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\DefaultConfigurationDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class DefaultConfigurationDTO {
+
+    private Integer id;
+    private String name;
+    private String compType;   // S / I / E / C
+
+    public DefaultConfigurationDTO(
+            Integer id,
+            String name,
+            String compType
+    ) {
+        this.id = id;
+        this.name = name;
+        this.compType = compType;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getCompType() {
+        return compType;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\InvoiceRequestDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class InvoiceRequestDTO {
+
+    private Integer modelId;
+    private Integer qty;
+    private String customerDetail;
+    private List<AlternateComponentDTO> components;
+
+    public Integer getModelId() {
+        return modelId;
+    }
+
+    public void setModelId(Integer modelId) {
+        this.modelId = modelId;
+    }
+
+    public Integer getQty() {
+        return qty;
+    }
+
+    public void setQty(Integer qty) {
+        this.qty = qty;
+    }
+
+    public String getCustomerDetail() {
+        return customerDetail;
+    }
+
+    public void setCustomerDetail(String customerDetail) {
+        this.customerDetail = customerDetail;
+    }
+
+    public List<AlternateComponentDTO> getComponents() {
+        return components;
+    }
+
+    public void setComponents(List<AlternateComponentDTO> components) {
+        this.components = components;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\IsConfigurationDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class IsConfigurationDTO {
+	private Integer modelId;
+    private String compType;
+	public Integer getModelId() {
+		return modelId;
+	}
+	public void setModelId(Integer modelId) {
+		this.modelId = modelId;
+	}
+	public String getCompType() {
+		return compType;
+	}
+	public void setCompType(String compType) {
+		this.compType = compType;
+	}
+    
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\LoginRequest.java
+--------------------------------------------------
+package com.example.dto;
+
+public class LoginRequest {
+
+    private String username;
+    private String password;
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\ManufacturerDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class ManufacturerDTO {
+
+    private Integer id;
+    private String name;
+
+    public ManufacturerDTO() {}
+
+    public ManufacturerDTO(Integer id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\ModelDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class ModelDTO {
+
+    private Integer id;
+    private String name;
+    private Double price;
+    private Integer minQty;
+    private String imagePath;
+
+    public ModelDTO() {}
+
+    public ModelDTO(Integer id, String name, Double price, Integer minQty, String imagePath) {
+        this.id = id;
+        this.name = name;
+        this.price = price;
+        this.minQty = minQty;
+        this.imagePath = imagePath;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Double getPrice() {
+        return price;
+    }
+
+    public void setPrice(Double price) {
+        this.price = price;
+    }
+
+    public Integer getMinQty() {
+        return minQty;
+    }
+
+    public void setMinQty(Integer minQty) {
+        this.minQty = minQty;
+    }
+
+    public String getImagePath() {
+        return imagePath;
+    }
+
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\OptionDto.java
+--------------------------------------------------
+package com.example.dto;
+
+public class OptionDto {
+	  private Integer compId;   
+	  private String subType;   
+	    private Double price;
+	    
+	    
+	    
+		public OptionDto(Integer compId, String subType, Double price) {
+			super();
+			this.compId = compId;
+			this.subType = subType;
+			this.price = price;
+		}
+		public Integer getCompId() {
+			return compId;
+		}
+		public void setCompId(Integer compId) {
+			this.compId = compId;
+		}
+		public String getSubType() {
+			return subType;
+		}
+		public void setSubType(String subType) {
+			this.subType = subType;
+		}
+		public Double getPrice() {
+			return price;
+		}
+		public void setPrice(Double price) {
+			this.price = price;
+		}
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\SegmentDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+public class SegmentDTO {
+
+    private Integer id;
+    private String name;
+    private Integer minQty;
+
+    public SegmentDTO() {}
+
+    public SegmentDTO(Integer id, String name, Integer minQty) {
+        this.id = id;
+        this.name = name;
+        this.minQty = minQty;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Integer getMinQty() {
+        return minQty;
+    }
+
+    public void setMinQty(Integer minQty) {
+        this.minQty = minQty;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\dto\WelcomeResponseDTO.java
+--------------------------------------------------
+package com.example.dto;
+
+import java.util.List;
+
+public class WelcomeResponseDTO {
+
+    private List<SegmentDTO> segments;
+    private List<ManufacturerDTO> manufacturers;
+    private List<ModelDTO> models;
+
+    public WelcomeResponseDTO() {}
+
+    public WelcomeResponseDTO(List<SegmentDTO> segments,
+                              List<ManufacturerDTO> manufacturers,
+                              List<ModelDTO> models) {
+        this.segments = segments;
+        this.manufacturers = manufacturers;
+        this.models = models;
+    }
+
+    public List<SegmentDTO> getSegments() {
+        return segments;
+    }
+
+    public void setSegments(List<SegmentDTO> segments) {
+        this.segments = segments;
+    }
+
+    public List<ManufacturerDTO> getManufacturers() {
+        return manufacturers;
+    }
+
+    public void setManufacturers(List<ManufacturerDTO> manufacturers) {
+        this.manufacturers = manufacturers;
+    }
+
+    public List<ModelDTO> getModels() {
+        return models;
+    }
+
+    public void setModels(List<ModelDTO> models) {
+        this.models = models;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\exception\GlobalExceptionHandler.java
+--------------------------------------------------
+package com.example.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    // 1️⃣ Generic Exception (Fallback)
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleException(Exception ex) {
+
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        error.put("error", "Internal Server Error");
+        error.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // 2️⃣ Runtime Exception
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex) {
+
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.BAD_REQUEST.value());
+        error.put("error", "Bad Request");
+        error.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
+    // 3️⃣ Validation Errors
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(
+            MethodArgumentNotValidException ex) {
+
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.BAD_REQUEST.value());
+        error.put("error", "Validation Failed");
+        error.put("message",
+                ex.getBindingResult()
+                        .getFieldError()
+                        .getDefaultMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\BCryptUtil.java
+--------------------------------------------------
+package com.example.logging;
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+public class BCryptUtil {
+
+    private static final BCryptPasswordEncoder encoder =
+            new BCryptPasswordEncoder(10);
+
+    public static String hash(String rawPassword) {
+        return encoder.encode(rawPassword);
+    }
+
+    // ✅ ADD THIS METHOD
+    public static boolean matches(String rawPassword, String hashedPassword) {
+        return encoder.matches(rawPassword, hashedPassword);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\LoginAuditAspect.java
+--------------------------------------------------
+package com.example.logging;
+
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.springframework.stereotype.Component;
+import com.example.dto.LoginRequest;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+@Aspect
+@Component
+public class LoginAuditAspect {
+
+    @Around("execution(* com.example.service.UserManager.login(..))")
+    public Object logLoginAttempt(ProceedingJoinPoint joinPoint) throws Throwable {
+
+        Object result;
+        String username = "UNKNOWN";
+        String ip = "UNKNOWN";
+
+        try {
+            Object[] args = joinPoint.getArgs();
+
+if (args.length > 0 && args[0] instanceof LoginRequest req) {
+    username = req.getUsername(); // OR req.getEmail()
+}
+
+            HttpServletRequest request =
+                    ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())
+                            .getRequest();
+            ip = request.getRemoteAddr();
+
+            result = joinPoint.proceed();
+
+            LoginAuditLogger.log(
+                    LoginAuditLogger.timestamp() +
+                    " | LOGIN_SUCCESS | user=" + username +
+                    " | ip=" + ip
+            );
+
+            return result;
+
+        } catch (Exception ex) {
+
+            LoginAuditLogger.log(
+                    LoginAuditLogger.timestamp() +
+                    " | LOGIN_FAILED | user=" + username +
+                    " | ip=" + ip +
+                    " | reason=" + ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\LoginAuditConfig.java
+--------------------------------------------------
+package com.example.logging;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+
+@Configuration
+@EnableAspectJAutoProxy
+public class LoginAuditConfig {
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\LoginAuditLogger.java
+--------------------------------------------------
+package com.example.logging;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+public class LoginAuditLogger {
+
+    private static final String LOG_DIR = "C:/logs";
+    private static final String LOG_FILE = LOG_DIR + File.separator + "login-audit.log";
+
+    static {
+        File dir = new File(LOG_DIR);
+        if (!dir.exists()) {
+            dir.mkdirs();   // ✅ create C:/logs automatically
+        }
+    }
+
+    public static synchronized void log(String message) {
+        try (FileWriter fw = new FileWriter(LOG_FILE, true)) {
+            fw.write(message + System.lineSeparator());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static String timestamp() {
+        return LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\RegistrationFileLogger.java
+--------------------------------------------------
+package com.example.logging;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.time.format.DateTimeFormatter;
+
+public class RegistrationFileLogger {
+
+    private static final String LOG_DIR = "C:/logs";
+    private static final String LOG_FILE = "registration-log.txt";
+
+    public static synchronized void log(RegistrationLogEntry entry) {
+        try {
+            File dir = new File(LOG_DIR);
+            if (!dir.exists()) dir.mkdirs();
+
+            FileWriter fw = new FileWriter(new File(dir, LOG_FILE), true);
+
+            fw.write("==================================================\n");
+            fw.write("Timestamp        : " + entry.timestamp.format(
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "\n");
+            fw.write("Status           : " + entry.status + "\n");
+
+            if (entry.username != null)
+                fw.write("Username         : " + entry.username + "\n");
+            if (entry.email != null)
+                fw.write("Email            : " + entry.email + "\n");
+            if (entry.role != null)
+                fw.write("Role             : " + entry.role + "\n");
+            if (entry.companyName != null)
+                fw.write("Company          : " + entry.companyName + "\n");
+            if (entry.registrationNo != null)
+                fw.write("Registration No  : " + entry.registrationNo + "\n");
+            if (entry.passwordHash != null)
+                fw.write("Password Hash    : " + entry.passwordHash + "\n");
+            if (entry.reason != null)
+                fw.write("Reason           : " + entry.reason + "\n");
+
+            fw.write("==================================================\n\n");
+            fw.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\RegistrationLogEntry.java
+--------------------------------------------------
+package com.example.logging;
+
+import java.time.LocalDateTime;
+
+public class RegistrationLogEntry {
+
+    public LocalDateTime timestamp;
+    public String status;
+    public String username;
+    public String email;
+    public String role;
+    public String companyName;
+    public String registrationNo;
+    public String passwordHash;
+    public String reason;
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\logging\RegistrationSecurityAspect.java
+--------------------------------------------------
+package com.example.logging;
+
+import com.example.models.User;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.*;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+
+@Aspect
+@Component
+public class RegistrationSecurityAspect {
+
+    @Around("execution(* com.example.service.UserService.saveRegistration(..))")
+    public Object encryptAndLog(ProceedingJoinPoint joinPoint) throws Throwable {
+
+        User user = (User) joinPoint.getArgs()[0];
+        String rawPassword = user.getPassword();
+
+        // 🔐 Encrypt BEFORE DB save
+        String encryptedPassword = BCryptUtil.hash(rawPassword);
+        user.setPassword(encryptedPassword);
+
+        try {
+            Object result = joinPoint.proceed();
+
+            // ✅ SUCCESS LOG
+            RegistrationLogEntry log = new RegistrationLogEntry();
+            log.timestamp = LocalDateTime.now();
+            log.status = "SUCCESS";
+            log.username = user.getUsername();
+            log.email = user.getEmail();
+            log.role = user.getRole();
+            log.companyName = user.getCompanyName();
+            log.registrationNo = user.getRegistrationNo();
+            log.passwordHash = encryptedPassword;
+
+            RegistrationFileLogger.log(log);
+            return result;
+
+        } catch (Exception ex) {
+
+            // ❌ FAILURE LOG
+            RegistrationLogEntry log = new RegistrationLogEntry();
+            log.timestamp = LocalDateTime.now();
+            log.status = "FAILED";	
+            log.username = user.getUsername();
+            log.email = user.getEmail();
+            log.reason = ex.getMessage();
+
+            RegistrationFileLogger.log(log);
+            throw ex;
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\AlternateComponentMaster.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "alternate_component_master")
+public class AlternateComponentMaster {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "alt_id")
+    private Integer id;
+
+    @Column(name = "delta_price")
+    private Double deltaPrice;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "alt_comp_id")
+    private Component altComp;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comp_id")
+    private Component comp;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "model_id")
+    private Model model;
+    
+   
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public Double getDeltaPrice() {
+        return deltaPrice;
+    }
+
+    public void setDeltaPrice(Double deltaPrice) {
+        this.deltaPrice = deltaPrice;
+    }
+
+    public Component getAltComp() {
+        return altComp;
+    }
+
+    public void setAltComp(Component altComp) {
+        this.altComp = altComp;
+    }
+
+    public Component getComp() {
+        return comp;
+    }
+
+    public void setComp(Component comp) {
+        this.comp = comp;
+    }
+
+    public Model getModel() {
+        return model;
+    }
+
+    public void setModel(Model model) {
+        this.model = model;
+    }
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\Component.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = "component")
+public class Component {
+	@Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "comp_id")
+    private Integer compId;
+
+    @Column(name = "comp_name")
+    private String compName;   // Main component name (Seat Belt, Air Bag)
+
+    @Column(name = "comp_type")
+    private String type;  
+    
+    @Column(name = "price")
+    private double price;  
+    
+    
+    public double getPrice() {
+		return price;
+	}
+
+	public void setPrice(double price) {
+		this.price = price;
+	}
+
+	@OneToMany(mappedBy = "comp")
+    private Set<AlternateComponentMaster> alternateComponentMasters = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "comp")
+    private Set<InvoiceDetail> invoiceDetails = new LinkedHashSet<>();
+
+    @OneToMany(mappedBy = "comp")
+    private Set<VehicleDetail> vehicleDetails = new LinkedHashSet<>();
+
+    
+    public Integer getCompId() {
+		return compId;
+	}
+
+	public void setCompId(Integer compId) {
+		this.compId = compId;
+	}
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
+	}
+
+	public String getCompName() {
+        return compName;
+    }
+
+    public void setCompName(String compName) {
+        this.compName = compName;
+    }
+
+    public Set<AlternateComponentMaster> getAlternateComponentMasters() {
+        return alternateComponentMasters;
+    }
+
+    public void setAlternateComponentMasters(Set<AlternateComponentMaster> alternateComponentMasters) {
+        this.alternateComponentMasters = alternateComponentMasters;
+    }
+
+    public Set<InvoiceDetail> getInvoiceDetails() {
+        return invoiceDetails;
+    }
+
+    public void setInvoiceDetails(Set<InvoiceDetail> invoiceDetails) {
+        this.invoiceDetails = invoiceDetails;
+    }
+
+    public Set<VehicleDetail> getVehicleDetails() {
+        return vehicleDetails;
+    }
+
+    public void setVehicleDetails(Set<VehicleDetail> vehicleDetails) {
+        this.vehicleDetails = vehicleDetails;
+    }
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\CompType.java
+--------------------------------------------------
+package com.example.models;
+
+public enum CompType {
+    C,  
+    E,  
+    I,  
+    S   
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\InvoiceDetail.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "invoice_detail")
+public class InvoiceDetail {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "inv_dtl_id", nullable = false)
+    private Integer id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comp_id")
+    private Component comp;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "inv_id")
+    private InvoiceHeader inv;
+    
+
+    @Column(name = "comp_price", nullable = false)
+    private Double compPrice;
+
+    public Double getCompPrice() {
+		return compPrice;
+	}
+
+	public void setCompPrice(Double compPrice) {
+		this.compPrice = compPrice;
+	}
+
+	public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public Component getComp() {
+        return comp;
+    }
+
+    public void setComp(Component comp) {
+        this.comp = comp;
+    }
+
+    public InvoiceHeader getInv() {
+        return inv;
+    }
+
+    public void setInv(InvoiceHeader inv) {
+        this.inv = inv;
+    }
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\InvoiceHeader.java
+--------------------------------------------------
+package com.example.models;
+
+import java.time.LocalDate;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "invoice_header")
+public class InvoiceHeader {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "inv_id")
+    private Integer id;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne
+    @JoinColumn(name = "model_id", nullable = false)
+    private Model model;
+
+    @Column(name = "qty", nullable = false)
+    private Integer qty;
+
+    @Column(name = "base_amt", nullable = false)
+    private Double baseAmt;
+
+    @Column(name = "tax", nullable = false)
+    private Double tax;
+
+    @Column(name = "total_amt", nullable = false)
+    private Double totalAmt;
+
+//    @Column(name = "amt", nullable = false)
+//    private Double amt;
+
+    @Column(name = "inv_date")
+    private LocalDate invDate;
+
+    public Integer getId() {
+		return id;
+	}
+
+	public void setId(Integer id) {
+		this.id = id;
+	}
+
+	public User getUser() {
+		return user;
+	}
+
+	public void setUser(User user) {
+		this.user = user;
+	}
+
+	public Model getModel() {
+		return model;
+	}
+
+	public void setModel(Model model) {
+		this.model = model;
+	}
+
+	public Integer getQty() {
+		return qty;
+	}
+
+	public void setQty(Integer qty) {
+		this.qty = qty;
+	}
+
+	public Double getBaseAmt() {
+		return baseAmt;
+	}
+
+	public void setBaseAmt(Double baseAmt) {
+		this.baseAmt = baseAmt;
+	}
+
+	public Double getTax() {
+		return tax;
+	}
+
+	public void setTax(Double tax) {
+		this.tax = tax;
+	}
+
+	public Double getTotalAmt() {
+		return totalAmt;
+	}
+
+	public void setTotalAmt(Double totalAmt) {
+		this.totalAmt = totalAmt;
+	}
+
+	public LocalDate getInvDate() {
+		return invDate;
+	}
+
+	public void setInvDate(LocalDate invDate) {
+		this.invDate = invDate;
+	}
+
+	public InvoiceStatus getStatus() {
+		return status;
+	}
+
+	public void setStatus(InvoiceStatus status) {
+		this.status = status;
+	}
+
+	public String getCustomerDetail() {
+		return customerDetail;
+	}
+
+	public void setCustomerDetail(String customerDetail) {
+		this.customerDetail = customerDetail;
+	}
+
+	@Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private InvoiceStatus status;
+
+    @Column(name = "customer_detail")
+    private String customerDetail;
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\InvoiceStatus.java
+--------------------------------------------------
+package com.example.models;
+
+public enum InvoiceStatus {
+
+	Pending,
+    Confirmed,
+    Cancelled
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\Manufacturer.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "manufacturer")
+public class Manufacturer {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "mfg_id")
+    private Integer id;
+
+    @Column(name = "mfg_name")
+    private String mfgName;
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getMfgName() {
+        return mfgName;
+    }
+
+    public void setMfgName(String mfgName) {
+        this.mfgName = mfgName;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\Model.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "model")
+public class Model {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "model_id")
+    private Integer id;
+
+    @Column(name = "img_path")
+    private String imgPath;
+
+    @Column(name = "min_qty", nullable = false)
+    private Integer minQty;
+
+    @Column(name = "model_name")
+    private String modelName;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mfg_id")
+    private Manufacturer mfg;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seg_id")
+    private Segment seg;
+
+    @Column(name = "price", nullable = false)
+    private Double price;
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getImgPath() {
+        return imgPath;
+    }
+
+    public void setImgPath(String imgPath) {
+        this.imgPath = imgPath;
+    }
+
+    public Integer getMinQty() {
+        return minQty;
+    }
+
+    public void setMinQty(Integer minQty) {
+        this.minQty = minQty;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
+    }
+
+    public Manufacturer getMfg() {
+        return mfg;
+    }
+
+    public void setMfg(Manufacturer mfg) {
+        this.mfg = mfg;
+    }
+
+    public Segment getSeg() {
+        return seg;
+    }
+
+    public void setSeg(Segment seg) {
+        this.seg = seg;
+    }
+
+    public Double getPrice() {
+        return price;
+    }
+
+    public void setPrice(Double price) {
+        this.price = price;
+    }
+}
+
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\Segment.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "segment")
+public class Segment {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "seg_id")
+    private Integer id;
+
+    @Column(name = "seg_name")
+    private String segName;
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getSegName() {
+        return segName;
+    }
+
+    public void setSegName(String segName) {
+        this.segName = segName;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\SgMfgMaster.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "sg_mfg_master")
+public class SgMfgMaster {
+
+	@Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "sgmf_id")   // ✅ MATCH DB COLUMN
+    private Integer id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mfg_id", nullable = false)
+    private Manufacturer mfg;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seg_id", nullable = false)
+    private Segment seg;
+
+    public Segment getSeg() { return seg; }
+    public Manufacturer getMfg() { return mfg; }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\User.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "user")
+public class User {
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "id", nullable = false)
+	private Integer id;
+
+	@Column(name = "name")
+	private String name;
+
+	@Column(name = "add1", nullable = false)
+	private String add1;
+
+	@Column(name = "add2")
+	private String add2;
+
+	@Column(name = "auth_name", nullable = false)
+	private String authName;
+
+	@Column(name = "auth_tel", nullable = false)
+	private String authTel;
+
+	@Column(name = "cell")
+	private String cell;
+
+	@Column(name = "city", nullable = false)
+	private String city;
+
+	@Column(name = "company_name", nullable = false)
+	private String companyName;
+
+	@Column(name = "company_st_no", nullable = false)
+	private String companyStNo;
+
+	@Column(name = "company_vat_no", nullable = false)
+	private String companyVatNo;
+
+	@Column(name = "designation", nullable = false)
+	private String designation;
+
+	@Column(name = "email", nullable = false)
+	private String email;
+
+	@Column(name = "fax")
+	private String fax;
+
+	@Column(name = "password", nullable = false)
+	private String password;
+
+	@Column(name = "pin")
+	private String pin;
+
+	@Column(name = "state", nullable = false)
+	private String state;
+
+	@Column(name = "tax_pan")
+	private String taxPan;
+
+	@Column(name = "tel")
+	private String tel;
+
+	@Column(name = "holding_type")
+	private String holdingType;
+
+	@Column(name = "phone")
+	private String phone;
+
+	@Column(name = "role")
+	private String role;
+
+	@Column(name = "username")
+	private String username;
+
+	@Column(name = "registration_no")
+	private String registrationNo;
+
+	@Column(name="failed_attempts")
+	private int failedAttempts;
+
+	
+	private boolean isBlocked;
+
+	public int getFailedAttempts() {
+		return failedAttempts;
+	}
+
+	public void setFailedAttempts(int failedAttempts) {
+		this.failedAttempts = failedAttempts;
+	}
+
+	public boolean isBlocked() {
+		return isBlocked;
+	}
+
+	public void setBlocked(boolean isBlocked) {
+		this.isBlocked = isBlocked;
+	}
+
+	public Integer getId() {
+		return id;
+	}
+
+	public void setId(Integer id) {
+		this.id = id;
+	}
+
+	public String getAdd1() {
+		return add1;
+	}
+
+	public void setAdd1(String add1) {
+		this.add1 = add1;
+	}
+
+	public String getAdd2() {
+		return add2;
+	}
+
+	public void setAdd2(String add2) {
+		this.add2 = add2;
+	}
+
+	public String getAuthName() {
+		return authName;
+	}
+
+	public void setAuthName(String authName) {
+		this.authName = authName;
+	}
+
+	public String getAuthTel() {
+		return authTel;
+	}
+
+	public void setAuthTel(String authTel) {
+		this.authTel = authTel;
+	}
+
+	public String getCell() {
+		return cell;
+	}
+
+	public void setCell(String cell) {
+		this.cell = cell;
+	}
+
+	public String getCity() {
+		return city;
+	}
+
+	public void setCity(String city) {
+		this.city = city;
+	}
+
+	public String getCompanyName() {
+		return companyName;
+	}
+
+	public void setCompanyName(String companyName) {
+		this.companyName = companyName;
+	}
+
+	public String getCompanyStNo() {
+		return companyStNo;
+	}
+
+	public void setCompanyStNo(String companyStNo) {
+		this.companyStNo = companyStNo;
+	}
+
+	public String getCompanyVatNo() {
+		return companyVatNo;
+	}
+
+	public void setCompanyVatNo(String companyVatNo) {
+		this.companyVatNo = companyVatNo;
+	}
+
+	public String getDesignation() {
+		return designation;
+	}
+
+	public void setDesignation(String designation) {
+		this.designation = designation;
+	}
+
+	public String getEmail() {
+		return email;
+	}
+
+	public void setEmail(String email) {
+		this.email = email;
+	}
+
+	public String getFax() {
+		return fax;
+	}
+
+	public void setFax(String fax) {
+		this.fax = fax;
+	}
+
+	public String getPassword() {
+		return password;
+	}
+
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public String getPin() {
+		return pin;
+	}
+
+	public void setPin(String pin) {
+		this.pin = pin;
+	}
+
+	public String getState() {
+		return state;
+	}
+
+	public void setState(String state) {
+		this.state = state;
+	}
+
+	public String getTaxPan() {
+		return taxPan;
+	}
+
+	public void setTaxPan(String taxPan) {
+		this.taxPan = taxPan;
+	}
+
+	public String getTel() {
+		return tel;
+	}
+
+	public void setTel(String tel) {
+		this.tel = tel;
+	}
+
+	public String getHoldingType() {
+		return holdingType;
+	}
+
+	public void setHoldingType(String holdingType) {
+		this.holdingType = holdingType;
+	}
+
+	public String getPhone() {
+		return phone;
+	}
+
+	public void setPhone(String phone) {
+		this.phone = phone;
+	}
+
+	public String getRole() {
+		return role;
+	}
+
+	public void setRole(String role) {
+		this.role = role;
+	}
+
+	public String getUsername() {
+		return username;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	public String getRegistrationNo() {
+		return registrationNo;
+	}
+
+	public void setRegistrationNo(String registrationNo) {
+		this.registrationNo = registrationNo;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\VehicleDefaultConfig.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "vehicle_default_config")
+public class VehicleDefaultConfig {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "config_id")
+    private Integer id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "model_id", nullable = false)
+    private Model model;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "comp_id", nullable = false)
+    private Component comp;
+    
+    @Column(name = "comp_type")
+    private String compType;
+
+    public String getCompType() {
+        return compType;
+    }
+
+
+	public Integer getId() {
+		return id;
+	}
+
+	public void setId(Integer id) {
+		this.id = id;
+	}
+
+	public Model getModel() {
+		return model;
+	}
+
+	public void setModel(Model model) {
+		this.model = model;
+	}
+
+	public Component getComp() {
+		return comp;
+	}
+
+	public void setComp(Component comp) {
+		this.comp = comp;
+	}
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\models\VehicleDetail.java
+--------------------------------------------------
+package com.example.models;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "vehicle_detail")
+public class VehicleDetail {
+
+	 @Id
+	    @GeneratedValue(strategy = GenerationType.IDENTITY)
+	    @Column(name = "config_id")
+	    private Integer configId;
+
+	    @Column(name = "comp_type")
+	    private String compType;   // S / I / E / C
+
+	    @Column(name = "is_config")
+	    private String isConfig;   // Y / N
+
+	    @ManyToOne(fetch = FetchType.LAZY)
+	    @JoinColumn(name = "comp_id")
+	    private Component comp;    // Default subtype
+
+	    @ManyToOne(fetch = FetchType.LAZY)
+	    @JoinColumn(name = "model_id")
+	    private Model model;
+
+
+    public Integer getConfigId() {
+			return configId;
+		}
+		public void setConfigId(Integer configId) {
+			this.configId = configId;
+		}
+		public String getCompType() {
+			return compType;
+		}
+		public void setCompType(String compType) {
+			this.compType = compType;
+		}
+	public Component getComp() { return comp; }
+    public void setComp(Component comp) { this.comp = comp; }
+
+    public Model getModel() { return model; }
+    public void setModel(Model model) { this.model = model; }
+
+    public String getIsConfig() { return isConfig; }
+    public void setIsConfig(String isConfig) { this.isConfig = isConfig; }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\AlternateComponentRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import com.example.models.AlternateComponentMaster;
+import com.example.models.Component;
+import com.example.models.Model;
+
+@Repository
+public interface AlternateComponentRepository extends JpaRepository<AlternateComponentMaster,Integer> {
+
+	Optional<AlternateComponentMaster>
+    findByModelAndComp(Model modelId, Component compId);
+	
+	@Query("""
+			 SELECT COALESCE(SUM(a.deltaPrice),0)
+			 FROM AlternateComponentMaster a
+			 WHERE a.model.id = :modelId
+			""")
+			Double sumDeltaPriceByModelId(@Param("modelId") Integer modelId);
+	
+	boolean existsByModel_Id(Integer id);
+	
+	List<AlternateComponentMaster> findByModel_Id(Integer id);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\ComponentRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.example.models.Component;
+
+public interface ComponentRepository extends JpaRepository<Component,Integer>{
+
+	Optional<Component> findById(Integer compId);
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\DefaultConfigRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.example.models.VehicleDefaultConfig;
+
+public interface DefaultConfigRepository extends JpaRepository<VehicleDefaultConfig,Integer>{
+
+	List<VehicleDefaultConfig> findByModel_Id(Integer id);
+
+
+	
+	
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\InvoiceDetailRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.example.models.InvoiceDetail;
+
+public interface InvoiceDetailRepository extends JpaRepository<InvoiceDetail,Integer>{
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\InvoiceHeaderRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import com.example.models.InvoiceHeader;
+
+public interface InvoiceHeaderRepository extends JpaRepository<InvoiceHeader, Integer>{
+	
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\ManufacturerRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import com.example.models.Manufacturer;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ManufacturerRepository extends JpaRepository<Manufacturer, Integer> {
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\ModelRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import com.example.models.Model;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface ModelRepository extends JpaRepository<Model, Integer> {
+
+    // ✅ USED BY WelcomeService (models dropdown)
+    List<Model> findByMfg_IdAndSeg_Id(Integer mfgId, Integer segId);
+
+    // ✅ USED BY DefaultConfigService (avoid LazyInitializationException)
+    @Query("""
+        select m
+        from Model m
+        join fetch m.seg
+        join fetch m.mfg
+        where m.id = :modelId
+    """)
+    Optional<Model> findByIdWithSegAndMfg(@Param("modelId") Integer modelId);
+    
+    Optional<Model> findById(Integer id);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\SegmentRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import com.example.models.Segment;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SegmentRepository extends JpaRepository<Segment, Integer> {
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\SgMfgMasterRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import com.example.models.SgMfgMaster;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface SgMfgMasterRepository extends JpaRepository<SgMfgMaster, Integer> {
+
+    @Query("""
+        select sm
+        from SgMfgMaster sm
+        join fetch sm.mfg
+        where sm.seg.id = :segId
+    """)
+    List<SgMfgMaster> findBySegIdWithManufacturer(@Param("segId") Integer segId);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\UserRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import com.example.models.User;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Integer> {
+
+    Optional<User> findByUsername(String username);
+
+    boolean existsByEmail(String email);
+    Optional<User> findByEmail(String email);
+
+    boolean existsByUsername(String username);
+
+    boolean existsByPhone(String phone);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\repository\VehicleDetailRepository.java
+--------------------------------------------------
+package com.example.repository;
+
+import com.example.models.VehicleDetail;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface VehicleDetailRepository extends JpaRepository<VehicleDetail, Integer> {
+
+    @Query("""
+        select vd
+        from VehicleDetail vd
+        join fetch vd.comp
+        where vd.model.id = :modelId
+        and vd.isConfig = 'Y'
+    """)
+    List<VehicleDetail> findDefaultComponents(@Param("modelId") Integer modelId);
+    
+    @Query("""
+    	       SELECT v.comp.compName
+    	       FROM VehicleDetail v
+    	       WHERE v.model.id = :modelId
+    	         AND v.isConfig = 'Y'
+    	         AND v.compType = :compType
+    	       """)
+    	List<String> findConfigurableVehicleDetails(
+    	        @Param("modelId") Integer modelId,
+    	        @Param("compType") String compType
+    	);
+
+    @Query("""
+    		 SELECT vd
+    		 FROM VehicleDetail vd
+    		 JOIN FETCH vd.comp c
+    		 WHERE vd.model.id = :modelId
+    		 AND vd.compType = :compType
+    		 AND vd.isConfig = 'Y'
+    		""")
+    		List<VehicleDetail> findConfigurableComponents(
+    				@Param("modelId")Integer modelId,
+    				@Param("compType") String compType
+    		);
+    
+    @Query("""
+    	    SELECT vd
+    	    FROM VehicleDetail vd
+    	    JOIN FETCH vd.comp c
+    	    WHERE vd.model.id = :modelId
+    	      AND vd.isConfig = 'Y'
+    	      AND vd.id IN (
+    	          SELECT MIN(vd2.id)
+    	          FROM VehicleDetail vd2
+    	          JOIN vd2.comp c2
+    	          WHERE vd2.model.id = :modelId
+    	            AND vd2.isConfig = 'Y'
+    	          GROUP BY c2.compName
+    	      )
+    	    ORDER BY c.compName
+    	""")
+    	List<VehicleDetail> findUniqueDefaultComponents(
+    	        @Param("modelId") Integer modelId
+    	);
+
+
+    
+     
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\AlternateComponentManager.java
+--------------------------------------------------
+package com.example.service;
+
+import com.example.dto.AlternateComponentSaveDTO;
+
+public interface AlternateComponentManager {
+
+	public void saveAlternateComponents(AlternateComponentSaveDTO dto);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\AlternateComponentManagerImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.dto.AlternateComponentDTO;
+import com.example.dto.AlternateComponentSaveDTO;
+import com.example.models.AlternateComponentMaster;
+import com.example.models.Component;
+import com.example.models.Model;
+import com.example.repository.AlternateComponentRepository;
+import com.example.repository.ComponentRepository;
+import com.example.repository.ModelRepository;
+
+@Service
+public class AlternateComponentManagerImpl implements AlternateComponentManager{
+
+	  @Autowired
+	   private AlternateComponentRepository repo;
+	
+	  @Autowired
+	  private ComponentRepository componentRepository;
+	  
+	  @Autowired
+	  private ModelRepository modelRepository;
+	
+	@Override
+	public void saveAlternateComponents(AlternateComponentSaveDTO dto) {
+		
+		 Integer modelId = dto.getModelId();
+		 Model model=modelRepository.findById(modelId).get();
+		 
+
+	        for (AlternateComponentDTO item : dto.getComponents()) {
+
+
+	            Component original = componentRepository
+	                    .findById(item.getCompId())
+	                    .orElseThrow(() ->
+	                        new RuntimeException("Original component not found"));
+
+	
+	            Component alternate = componentRepository
+	                    .findById(item.getAltCompId())
+	                    .orElseThrow(() ->
+	                        new RuntimeException("Alternate component not found"));
+
+	      
+	            if (!original.getCompName().equals(alternate.getCompName())) {
+	                throw new RuntimeException("Invalid component replacement");
+	            }
+
+	   
+	            double deltaPrice = alternate.getPrice() - original.getPrice();
+
+	   
+	            AlternateComponentMaster acm =
+	                repo
+	                    .findByModelAndComp(model, original)
+	                    .orElse(new AlternateComponentMaster());
+
+	        
+	            acm.setModel(model);
+	            acm.setComp(original);
+	            acm.setAltComp(alternate);
+	            acm.setDeltaPrice(deltaPrice);
+
+	          
+	            repo.save(acm);
+		
+	}
+
+}}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\DefaultConfigManager.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import com.example.dto.DefaultConfigurationDTO;
+
+public interface DefaultConfigManager {
+
+	List<DefaultConfigurationDTO>  getDefaultConfiguration(Integer id);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\DefaultConfigManagerImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.example.dto.DefaultConfigurationDTO;
+import com.example.models.VehicleDefaultConfig;
+import com.example.repository.DefaultConfigRepository;
+
+@Service
+public class DefaultConfigManagerImpl implements DefaultConfigManager {
+
+    @Autowired
+    private DefaultConfigRepository repository;
+
+    @Override
+    @Transactional
+    public List<DefaultConfigurationDTO> getDefaultConfiguration(Integer id) {
+
+        List<VehicleDefaultConfig> list = repository.findByModel_Id(id);
+
+        List<DefaultConfigurationDTO> mylist = list.stream()
+            .map(v -> new DefaultConfigurationDTO(
+                v.getComp().getCompId(),
+                v.getComp().getCompName(),
+                v.getCompType()
+            ))
+            .toList();   // ✅ VERY IMPORTANT
+
+        return mylist;
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\DefaultConfigService.java
+--------------------------------------------------
+package com.example.service;
+
+import com.example.dto.*;
+import com.example.models.*;
+import com.example.repository.*;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class DefaultConfigService {
+
+    private final ModelRepository modelRepo;
+    private final VehicleDetailRepository vehicleRepo;
+
+    public DefaultConfigService(
+            ModelRepository modelRepo,
+            VehicleDetailRepository vehicleRepo
+    ) {
+        this.modelRepo = modelRepo;
+        this.vehicleRepo = vehicleRepo;
+    }
+
+    
+    
+    public DefaultConfigResponseDTO getDefaultConfiguration(
+            Integer modelId,
+            Integer quantity
+    ) 
+    {
+
+        Model model = modelRepo.findByIdWithSegAndMfg(modelId)
+                .orElseThrow(() -> new RuntimeException("Invalid model"));
+
+        List<ComponentDTO> components =
+        	    vehicleRepo.findUniqueDefaultComponents(modelId)
+        	        .stream()
+        	        .map(v -> new ComponentDTO(
+        	            v.getComp().getCompId(),
+        	            v.getComp().getType()   // ✅ default variant
+        	        ))
+        	        .toList();
+
+
+        double unitPrice = model.getPrice();
+        double totalPrice = unitPrice * quantity;
+
+        return new DefaultConfigResponseDTO(
+                model.getId(),
+                model.getModelName(),
+                model.getSeg().getSegName(),
+                model.getMfg().getMfgName(),
+                unitPrice,
+                model.getMinQty(),
+                totalPrice,
+                model.getImgPath(),   // 
+                components
+        );
+
+
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\EmailSender.java
+--------------------------------------------------
+package com.example.service;
+
+
+
+import java.util.Properties;
+
+import jakarta.activation.DataHandler;
+import jakarta.activation.DataSource;
+import jakarta.mail.*;
+import jakarta.mail.internet.*;
+import jakarta.mail.util.ByteArrayDataSource;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class EmailSender {
+
+    private final String username = "omkarbghatage03@gmail.com";
+    private final String password = "omaw zzck chmt ivmv"; // app password
+
+    public void sendWithAttachment(
+            String toEmail,
+            String subject,
+            byte[] pdfBytes,
+            String fileName,
+            String messageText
+    ) {
+        try {
+            Properties props = new Properties();
+            props.put("mail.smtp.auth", "true");
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.host", "smtp.gmail.com");
+            props.put("mail.smtp.port", "587");
+
+            Session session = Session.getInstance(props,
+                new Authenticator() {
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(username, password);
+                    }
+                });
+
+            Message message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(username));
+            message.setRecipients(
+                    Message.RecipientType.TO,
+                    InternetAddress.parse(toEmail)
+            );
+            message.setSubject(subject);
+
+            Multipart multipart = new MimeMultipart();
+
+            // ===== TEXT BODY =====
+            MimeBodyPart textPart = new MimeBodyPart();
+            textPart.setText(messageText);
+            multipart.addBodyPart(textPart);
+
+            // ===== PDF ATTACHMENT =====
+            MimeBodyPart attachmentPart = new MimeBodyPart();
+            DataSource dataSource =
+                    new ByteArrayDataSource(pdfBytes, "application/pdf");
+
+            attachmentPart.setDataHandler(new DataHandler(dataSource));
+            attachmentPart.setFileName(fileName);
+            multipart.addBodyPart(attachmentPart);
+
+            message.setContent(multipart);
+
+            Transport.send(message);
+            System.out.println("✅ Email sent to " + toEmail);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\EmailService.java
+--------------------------------------------------
+package com.example.service;
+
+
+
+import com.example.models.User;
+
+public interface EmailService {
+    void sendRegistrationEmail(User user, byte[] pdfBytes);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\EmailServiceImpl.java
+--------------------------------------------------
+package com.example.service;
+
+
+
+
+import java.io.File;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.models.User;
+
+import jakarta.mail.internet.MimeMessage;
+
+@Service
+public class EmailServiceImpl implements EmailService {
+
+    @Autowired
+    private EmailSender mailSender;
+    @Autowired
+    private InvoicePdfService pdfService;
+
+    
+
+    @Override
+    public void sendRegistrationEmail(User user, byte[] pdfBytes) {
+
+        String subject = "Registration Successful - PDF Attached";
+
+        String message =
+                "Hello " + user.getAuthName() + ",\n\n" +
+                "Your registration has been completed successfully.\n\n" +
+                "Registration No: " + user.getRegistrationNo() + "\n" +
+                "Company: " + user.getCompanyName() + "\n\n" +
+                "Please find your registration PDF attached.\n\n" +
+                "Regards,\nVehicle Configurator Team";
+
+        mailSender.sendWithAttachment(
+                user.getEmail(),
+                subject,
+                pdfBytes,
+                "registration-details.pdf",
+                message
+        );
+    }
+    public void sendInvoiceEmail(
+            User user,
+            byte[] pdfBytes,
+            Integer invoiceId
+    ) {
+        System.out.println("📧 SENDING INVOICE EMAIL");
+        System.out.println("To: " + user.getEmail());
+        System.out.println("Invoice ID: " + invoiceId);
+        System.out.println("PDF size: " + pdfBytes.length);
+
+        String subject = "Invoice #" + invoiceId;
+
+        String message =
+                "Hello " + user.getAuthName() + ",\n\n" +
+                "Thank you for your vehicle order.\n\n" +
+                "Invoice No: " + invoiceId + "\n\n" +
+                "Please find the invoice PDF attached.\n\n" +
+                "Regards,\nVehicle Configurator Team";
+
+        mailSender.sendWithAttachment(
+                user.getEmail(),
+                subject,
+                pdfBytes,
+                "invoice_" + invoiceId + ".pdf",
+                message
+        );
+
+        System.out.println("✅ EMAIL METHOD FINISHED");
+    }
+
+    
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\Invoicemanager.java
+--------------------------------------------------
+package com.example.service;
+
+import com.example.dto.InvoiceRequestDTO;
+
+public interface Invoicemanager {
+
+    void generateInvoice(InvoiceRequestDTO dto, String username);
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\InvoiceManagerImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.dto.AlternateComponentDTO;
+import com.example.dto.InvoiceRequestDTO;
+import com.example.models.Component;
+import com.example.models.InvoiceDetail;
+import com.example.models.InvoiceHeader;
+import com.example.models.InvoiceStatus;
+import com.example.models.Model;
+import com.example.models.User;
+import com.example.repository.ComponentRepository;
+import com.example.repository.InvoiceDetailRepository;
+import com.example.repository.InvoiceHeaderRepository;
+import com.example.repository.ModelRepository;
+import com.example.repository.UserRepository;
+
+import jakarta.transaction.Transactional;
+
+@Service
+public class InvoiceManagerImpl implements Invoicemanager {
+
+    @Autowired
+    private ModelRepository modelRepository;
+
+    @Autowired
+    private InvoiceHeaderRepository invoiceRepo;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private InvoiceDetailRepository detailRepository;
+
+    @Autowired
+    private ComponentRepository componentRepo;
+
+    @Autowired
+    private InvoicePdfService pdfService;
+
+    @Autowired
+    private EmailServiceImpl emailService;
+
+    @Override
+    @Transactional
+    public void generateInvoice(InvoiceRequestDTO dto, String username) {
+
+        System.out.println("INVOICE DTO = " + dto);
+        System.out.println("JWT USER = " + username);
+
+        if (dto.getModelId() == null) {
+            throw new RuntimeException("Model ID missing");
+        }
+
+        if (dto.getQty() == null || dto.getQty() <= 0) {
+            throw new RuntimeException("Invalid quantity");
+        }
+
+        // ===== USER =====
+        User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // ===== MODEL =====
+        Model model = modelRepository.findById(dto.getModelId())
+                .orElseThrow(() -> new RuntimeException("Model not found"));
+
+        // ===== PRICE CALC =====
+        double baseAmt = model.getPrice() * dto.getQty();
+
+        double addOnTotal = 0.0;
+        List<Component> selectedComponents = new ArrayList<>();
+
+        if (dto.getComponents() != null && !dto.getComponents().isEmpty()) {
+            for (AlternateComponentDTO c : dto.getComponents()) {
+
+                Component altComp = componentRepo.findById(c.getAltCompId())
+                        .orElseThrow(() -> new RuntimeException("Alt component not found"));
+
+                selectedComponents.add(altComp);
+                addOnTotal += altComp.getPrice();
+            }
+        }
+
+        double amount = baseAmt + addOnTotal;
+        double tax = amount * 0.18;
+        double totalAmt = amount + tax;
+
+        // ===== SAVE HEADER =====
+        InvoiceHeader invoice = new InvoiceHeader();
+        invoice.setUser(user);
+        invoice.setModel(model);
+        invoice.setQty(dto.getQty());
+        invoice.setBaseAmt(baseAmt);
+        invoice.setTax(tax);
+        invoice.setTotalAmt(totalAmt);
+        invoice.setInvDate(LocalDate.now());
+        invoice.setStatus(InvoiceStatus.Confirmed);
+        invoice.setCustomerDetail(dto.getCustomerDetail());
+
+        InvoiceHeader savedInvoice = invoiceRepo.save(invoice);
+
+        // ===== SAVE DETAILS (ONLY USER SELECTION) =====
+        for (Component comp : selectedComponents) {
+            InvoiceDetail d = new InvoiceDetail();
+            d.setInv(savedInvoice);
+            d.setComp(comp);
+            d.setCompPrice(comp.getPrice());
+            detailRepository.save(d);
+        }
+
+        // ===== FETCH DETAILS =====
+        List<InvoiceDetail> details =
+                detailRepository.findAll().stream()
+                        .filter(d -> d.getInv().getId().equals(savedInvoice.getId()))
+                        .toList();
+
+        // ===== PDF + EMAIL =====
+        try {
+            byte[] pdfBytes = pdfService.generateInvoicePdf(savedInvoice, details);
+            System.out.println("📄 PDF generated, size = " + pdfBytes.length);
+
+            System.out.println("📧 Sending invoice email...");
+            emailService.sendInvoiceEmail(user, pdfBytes, savedInvoice.getId());
+            System.out.println("✅ Invoice email sent");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Invoice generation failed");
+        }
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\InvoicePdfService.java
+--------------------------------------------------
+package com.example.service;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.example.models.InvoiceDetail;
+import com.example.models.InvoiceHeader;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfPTable;
+import com.itextpdf.text.pdf.PdfWriter;
+
+@Service
+public class InvoicePdfService {
+
+	public byte[] generateInvoicePdf(
+	        InvoiceHeader invoice,
+	        List<InvoiceDetail> details) throws Exception {
+
+	    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+	    Document document = new Document();
+	    PdfWriter.getInstance(document, baos);
+
+	    document.open();
+
+	    document.add(new Paragraph("VEHICLE INVOICE"));
+	    document.add(new Paragraph("Invoice ID: " + invoice.getId()));
+	    document.add(new Paragraph("Date: " + invoice.getInvDate()));
+	    document.add(new Paragraph("Customer: " + invoice.getCustomerDetail()));
+	    document.add(new Paragraph(" "));
+
+	    PdfPTable table = new PdfPTable(3);
+	    table.addCell("Component");
+	    table.addCell("Type");
+	    table.addCell("Price");
+
+	    for (InvoiceDetail d : details) {
+	        table.addCell(d.getComp().getCompName());
+	        table.addCell(d.getComp().getType());
+	        table.addCell("₹ " + d.getCompPrice());
+	    }
+
+	    document.add(table);
+	    document.add(new Paragraph(" "));
+	    document.add(new Paragraph("Base Amount: ₹ " + invoice.getBaseAmt()));
+	    document.add(new Paragraph("Tax: ₹ " + invoice.getTax()));
+	    document.add(new Paragraph("Total: ₹ " + invoice.getTotalAmt()));
+
+	    document.close();
+
+	    return baos.toByteArray();
+	}
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\UserManager.java
+--------------------------------------------------
+package com.example.service;
+
+import org.springframework.stereotype.Service;
+
+import com.example.dto.LoginRequest;
+
+
+public interface UserManager {
+	
+	String login(LoginRequest request);
+	
+//	String Outh(String email);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\UserManagerImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.example.auth.JwtUtil;
+import com.example.dto.LoginRequest;
+import com.example.models.User;
+import com.example.repository.UserRepository;
+
+@Service
+public class UserManagerImpl implements UserManager {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Override
+    public String login(LoginRequest request) {
+
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+
+        if (user.isBlocked()) {
+            throw new RuntimeException("User is blocked");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+
+            user.setFailedAttempts(user.getFailedAttempts() + 1);
+
+            if (user.getFailedAttempts() >= 3) {
+                user.setBlocked(true);
+            }
+
+            userRepository.save(user);
+            throw new RuntimeException("Invalid username or password");
+        }
+
+        user.setFailedAttempts(0);
+        userRepository.save(user);
+
+        return jwtUtil.generateToken(user.getUsername());
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\UserService.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import com.example.models.User;
+
+public interface UserService {
+	 public List<User> getAllRegistrations();
+	 public User saveRegistration(User reg) ;
+	 User getById(Integer id);
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\UserServiceImpl.java
+--------------------------------------------------
+//package com.example.service;
+//
+//import java.util.List;
+//
+//import org.springframework.beans.factory.annotation.Autowired;
+//import org.springframework.stereotype.Service;
+//import org.springframework.web.client.RestTemplate;
+//
+//import com.example.models.User;
+//import com.example.repository.UserRepository;
+//
+//@Service
+//public class UserServiceImpl implements UserService {
+//
+//    @Autowired
+//    private UserRepository repository;
+//
+//    @Autowired
+//    private EmailService emailService;
+//
+//    @Autowired
+//    private RestTemplate restTemplate;
+//
+//    public List<User> getAllRegistrations() {
+//        return repository.findAll();
+//    }
+//
+//    @Override
+//    public User saveRegistration(User user) {
+//
+//        String regNo = "VCONF-" + System.currentTimeMillis();
+//        user.setRegistrationNo(regNo);
+//        user.setRole("USER");
+//
+//        // 1️⃣ Save user in DB
+//        User savedUser = repository.save(user);
+//
+//        // 2️⃣ CALL PDF MICROSERVICE (IMPORTANT)
+//        byte[] pdfBytes = restTemplate.postForObject(
+//                "http://localhost:9003/api/registration/pdf",
+//                savedUser,
+//                byte[].class
+//        );
+//
+//        // 3️⃣ Send email with PDF
+//        emailService.sendRegistrationEmail(savedUser, pdfBytes);
+//
+//        return savedUser;
+//    }
+//
+//    @Override
+//    public User getById(Integer id) {
+//        return repository.findById(id)
+//                .orElseThrow(() -> new RuntimeException("User not found"));
+//    }
+//}
+
+
+package com.example.service;
+
+
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.models.User;
+import com.example.repository.UserRepository;
+
+@Service
+public class UserServiceImpl implements UserService {
+
+    @Autowired
+    private UserRepository repository;
+
+    @Autowired
+    private EmailService emailService;
+
+    @Override
+    public List<User> getAllRegistrations() {
+        return repository.findAll();
+    }
+
+    // ✅ MAIN REGISTRATION METHOD
+    @Override
+    public User saveRegistration(User user) {
+
+        /* =====================================================
+         * STEP 1: SERVICE-LAYER VALIDATION (SAFE, NO DB CHANGE)
+         * ===================================================== */
+
+        // 1️⃣ Email duplicate check
+        if (repository.existsByEmail(user.getEmail())) {
+            throw new RuntimeException("Email already registered");
+        }
+
+        // 2️⃣ Username duplicate check
+        if (repository.existsByUsername(user.getUsername())) {
+            throw new RuntimeException("Username already exists");
+        }
+
+        // 3️⃣ Phone duplicate check (optional null safety)
+        if (user.getPhone() != null &&
+            repository.existsByPhone(user.getPhone())) {
+            throw new RuntimeException("Phone number already registered");
+        }
+
+        /* =====================================================
+         * STEP 2: BUSINESS LOGIC (YOUR EXISTING CODE)
+         * ===================================================== */
+
+        String regNo = "VCONF-" + System.currentTimeMillis();
+        user.setRegistrationNo(regNo);
+        user.setRole("USER");
+
+        // ✅ SAVE ONLY AFTER VALIDATION PASSES
+        User savedUser = repository.save(user);
+
+        /* =====================================================
+         * STEP 3: POST-SAVE OPERATIONS
+         * ===================================================== */
+
+        // ✅ Generate PDF
+        byte[] pdfBytes =
+                com.example.util.PdfGeneratorUtil.generateUserPdf(savedUser);
+
+        // ✅ Send email WITH PDF
+        emailService.sendRegistrationEmail(savedUser, pdfBytes);
+
+        return savedUser;
+    }
+
+    @Override
+    public User getById(Integer id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\VehicalDetailImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.repository.VehicleDetailRepository;
+
+@Service
+public class VehicalDetailImpl implements VehicalDetails{
+
+	
+	@Autowired
+	private VehicleDetailRepository vehicalRepository;
+	
+	@Override
+	public List<String> isConfigurable(int modelId, String compType) {
+		
+		List<String> list=vehicalRepository.findConfigurableVehicleDetails(modelId, compType);
+		
+		return list;
+	}
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\VehicalDetails.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public interface VehicalDetails {
+     
+	List<String> isConfigurable(int modelId,String compType);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\VehicleManager.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.List;
+
+import com.example.dto.ComponentDropdownDto;
+
+public interface VehicleManager {
+	List<ComponentDropdownDto> getConfigurableComponents(Integer modelId,String compType);
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\VehicleManagerImpl.java
+--------------------------------------------------
+package com.example.service;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.dto.ComponentDropdownDto;
+import com.example.dto.OptionDto;
+import com.example.models.Component;
+import com.example.models.VehicleDetail;
+import com.example.repository.VehicleDetailRepository;
+
+@Service
+public class VehicleManagerImpl implements VehicleManager {
+
+    @Autowired
+    private VehicleDetailRepository vehicleRepo;
+
+    @Override
+    public List<ComponentDropdownDto> getConfigurableComponents(Integer modelId, String compType) {
+
+        List<VehicleDetail> details =
+                vehicleRepo.findConfigurableComponents(modelId, compType);
+
+        Map<Integer, ComponentDropdownDto> groupedMap = new LinkedHashMap<>();
+
+        for (VehicleDetail vd : details) {
+
+            Integer baseCompId = vd.getComp().getCompId(); // ✅ BASE COMPONENT
+            String componentName = vd.getComp().getCompName();
+
+            Component optionComp = vd.getComp(); // alternate component
+
+            OptionDto option = new OptionDto(
+                    optionComp.getCompId(),
+                    optionComp.getType(),
+                    optionComp.getPrice()
+            );
+
+            groupedMap
+                .computeIfAbsent(
+                    baseCompId,
+                    id -> new ComponentDropdownDto(
+                            id,
+                            componentName,
+                            new ArrayList<>()
+                    )
+                )
+                .getOptions()
+                .add(option);
+        }
+
+        return new ArrayList<>(groupedMap.values());
+    }
+
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\service\WelcomeService.java
+--------------------------------------------------
+package com.example.service;
+
+import com.example.dto.*;
+import com.example.models.*;
+import com.example.repository.*;
+
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class WelcomeService {
+
+    private final SegmentRepository segmentRepo;
+    private final SgMfgMasterRepository sgMfgRepo;
+    private final ModelRepository modelRepo;
+
+    public WelcomeService(
+            SegmentRepository segmentRepo,
+            SgMfgMasterRepository sgMfgRepo,
+            ModelRepository modelRepo
+    ) {
+        this.segmentRepo = segmentRepo;
+        this.sgMfgRepo = sgMfgRepo;
+        this.modelRepo = modelRepo;
+    }
+
+    
+ // 🔥 Cache all segments (no parameters → one cache entry)
+    @Cacheable("segments")
+    public List<SegmentDTO> getAllSegments() {
+        return segmentRepo.findAll()
+                .stream()
+                .map(s -> new SegmentDTO(
+                        s.getId(),
+                        s.getSegName(),
+                        null
+                ))
+                .collect(Collectors.toList());
+    }
+
+ // 🔥 Cache manufacturers per segment
+    @Cacheable(value = "manufacturers", key = "#segId")
+    public List<ManufacturerDTO> getManufacturersBySegment(Integer segId) {
+        return sgMfgRepo.findBySegIdWithManufacturer(segId)
+                .stream()
+                .map(SgMfgMaster::getMfg)
+                .distinct()
+                .map(m -> new ManufacturerDTO(
+                        m.getId(),
+                        m.getMfgName()
+                ))
+                .collect(Collectors.toList());
+    }
+
+ // 🔥 Cache models per segment + manufacturer
+    @Cacheable(value = "models", key = "#segId + '-' + #mfgId")	
+    public List<ModelDTO> getModels(Integer segId, Integer mfgId) {
+        return modelRepo.findByMfg_IdAndSeg_Id(mfgId, segId)
+                .stream()
+                .map(m -> new ModelDTO(
+                        m.getId(),
+                        m.getModelName(),
+                        m.getPrice(),
+                        m.getMinQty(),
+                        m.getImgPath()
+                ))
+                .collect(Collectors.toList());
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\util\PdfGeneratorUtil.java
+--------------------------------------------------
+package com.example.util;
+
+
+
+
+
+import com.example.models.User;
+import com.itextpdf.text.*;
+import com.itextpdf.text.pdf.PdfWriter;
+
+import java.io.ByteArrayOutputStream;
+
+public class PdfGeneratorUtil {
+
+    public static byte[] generateUserPdf(User user) {
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        try {
+            Document document = new Document(PageSize.A4, 36, 36, 36, 36);
+            PdfWriter.getInstance(document, out);
+            document.open();
+
+            // ===== FONTS =====
+            Font titleFont = new Font(Font.FontFamily.HELVETICA, 18, Font.BOLD);
+            Font sectionFont = new Font(Font.FontFamily.HELVETICA, 14, Font.BOLD);
+            Font labelFont = new Font(Font.FontFamily.HELVETICA, 11, Font.BOLD);
+            Font valueFont = new Font(Font.FontFamily.HELVETICA, 11);
+
+            // ===== TITLE =====
+            document.add(new Paragraph("User Registration Details", titleFont));
+            document.add(Chunk.NEWLINE);
+
+            // ===== COMPANY DETAILS =====
+            document.add(new Paragraph("Company Details", sectionFont));
+            document.add(Chunk.NEWLINE);
+
+            addField(document, labelFont, valueFont, "Company Name", user.getCompanyName());
+            addField(document, labelFont, valueFont, "Holding Type", user.getHoldingType());
+            addField(document, labelFont, valueFont, "Company ST No", user.getCompanyStNo());
+            addField(document, labelFont, valueFont, "Company VAT No", user.getCompanyVatNo());
+            addField(document, labelFont, valueFont, "PAN Number", user.getTaxPan());
+            addField(document, labelFont, valueFont, "Registration No", user.getRegistrationNo());
+
+            document.add(Chunk.NEWLINE);
+
+            // ===== AUTHORIZED PERSON =====
+            document.add(new Paragraph("Authorized Person Details", sectionFont));
+            document.add(Chunk.NEWLINE);
+
+            addField(document, labelFont, valueFont, "Name", user.getAuthName());
+            addField(document, labelFont, valueFont, "Designation", user.getDesignation());
+            addField(document, labelFont, valueFont, "Auth Telephone", user.getAuthTel());
+            addField(document, labelFont, valueFont, "Mobile", user.getCell());
+            addField(document, labelFont, valueFont, "Phone", user.getPhone());
+            addField(document, labelFont, valueFont, "Email", user.getEmail());
+
+            document.add(Chunk.NEWLINE);
+
+            // ===== ADDRESS =====
+            document.add(new Paragraph("Address Details", sectionFont));
+            document.add(Chunk.NEWLINE);
+
+            addField(document, labelFont, valueFont, "Address Line 1", user.getAdd1());
+            addField(document, labelFont, valueFont, "Address Line 2", user.getAdd2());
+            addField(document, labelFont, valueFont, "City", user.getCity());
+            addField(document, labelFont, valueFont, "State", user.getState());
+            addField(document, labelFont, valueFont, "PIN Code", user.getPin());
+            addField(document, labelFont, valueFont, "Telephone", user.getTel());
+            addField(document, labelFont, valueFont, "Fax", user.getFax());
+
+            document.add(Chunk.NEWLINE);
+
+            // ===== ACCOUNT DETAILS =====
+            document.add(new Paragraph("Account Details", sectionFont));
+            document.add(Chunk.NEWLINE);
+
+            addField(document, labelFont, valueFont, "Username", user.getUsername());
+            addField(document, labelFont, valueFont, "Role", user.getRole());
+
+            // ❌ PASSWORD IS NOT ADDED (SECURITY ✔)
+
+            document.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return out.toByteArray();
+    }
+
+    // ===== HELPER METHOD =====
+    private static void addField(
+            Document document,
+            Font labelFont,
+            Font valueFont,
+            String label,
+            String value
+    ) throws DocumentException {
+
+        if (value == null || value.trim().isEmpty()) return;
+
+        Paragraph p = new Paragraph();
+        p.add(new Chunk(label + ": ", labelFont));
+        p.add(new Chunk(value, valueFont));
+        p.setSpacingAfter(6f);
+        document.add(p);
+    }
+}
+--------------------------------------------------
+FILE: D:\CDAC\Vehicle Configurator\Backend\v-conf\v-conf\src\main\java\com\example\VConfApplication.java
+--------------------------------------------------
+package com.example;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.web.client.RestTemplate;
+
+@SpringBootApplication
+@EntityScan(basePackages = "com.example.models")
+@EnableJpaRepositories(basePackages = "com.example.repository")
+@EnableAspectJAutoProxy
+@EnableCaching
+public class VConfApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(VConfApplication.class, args);
+	}
+
+	// ✅ REQUIRED for calling PDF microservice
+	@Bean
+	public RestTemplate restTemplate() {
+		return new RestTemplate();
+	}
+}

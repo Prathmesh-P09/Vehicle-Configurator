@@ -1,0 +1,58 @@
+==========================================
+Analysis of the Insecure "Hybrid" Flow
+==========================================
+
+The current implementation in `EnhancedSignIn.jsx` attempts to bridge Google Sign-In with the existing manual `AuthService.cs` login method. 
+
+Here is exactly how it works and why it is dangerous.
+
+------------------------------------------
+1. The Mechanism (How it works)
+------------------------------------------
+
+1. Frontend (Google Sign-In):
+   - The user signs in with Google.
+   - Google gives the frontend a secure "ID Token".
+   - The frontend decodes this token and extracts the user's `email`.
+
+2. Frontend (The Hack):
+   - The frontend ignores the secure ID Token for validation.
+   - Instead, it makes a standard manual login request to the backend:
+     `POST /auth/login`
+     `{ "username": "user@example.com", "password": "CHECK_USER" }`
+
+3. Backend (The Check):
+   - The `AuthService.Login` method receives this request.
+   - It looks up the user by email.
+   - It hashes the incoming password ("CHECK_USER") and compares it to the password stored in the database.
+   - IF the passwords match, it issues a JWT token.
+
+4. The Implication:
+   - For this flow to work, **Auto-Registered users must have their password set to the hash of "CHECK_USER"**.
+   - The registration logic (not fully seen here, but implied) likely sets `password = Hash("CHECK_USER")` when a user signs up via Google.
+
+------------------------------------------
+2. The Security Vulnerability (Why it is Insecure)
+------------------------------------------
+
+The critical flaw is that the "secret" required to log in is public and identical for all Google users.
+
+The Attack Scenario:
+1. Attacker knows your email is `victim@example.com`.
+2. Attacker suspects you used Google Sign-In to create your account.
+3. Attacker goes to the **Manual Sign-In Form** on the website.
+4. Attacker enters:
+   - Username: `victim@example.com`
+   - Password: `CHECK_USER`
+5. The Backend validates the password (since it's just the standard login endpoint) and logs the attacker in as YOU.
+
+------------------------------------------
+3. Missing Security Layers
+------------------------------------------
+
+In a proper flow:
+1. The Frontend should send the **Google ID Token** to the backend.
+2. The Backend should **verify the signature** of that token with Google (proving it came from Google).
+3. The Backend should **NOT** check a password for this request. It should trust the verified token.
+
+By converting the OAuth interaction into a "password login" with a hardcoded password, the system removes the security provided by Google and replaces it with a known, shared password.

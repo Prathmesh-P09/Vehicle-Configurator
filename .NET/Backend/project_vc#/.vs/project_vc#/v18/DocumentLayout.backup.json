@@ -1,0 +1,256 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\services\\invoiceservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\services\\invoiceservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\services\\jwtutil.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\services\\jwtutil.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\controllers\\registercontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\controllers\\registercontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\models\\manufacturer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\models\\manufacturer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\models\\invoiceheader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\models\\invoiceheader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\data\\applicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\models\\invoicedetail.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\models\\invoicedetail.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|d:\\cdac\\vehicle configurator\\.net\\backend\\project_vc#\\project_vc#\\models\\comptype.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{AAC138F4-7CA7-46BD-AE47-A64ADF7B81F9}|project_vc#\\project_vc#.csproj|solutionrelative:project_vc#\\models\\comptype.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 7,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{0ad07096-bba9-4900-a651-0598d26f6d24}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{fbcae063-e2c0-4ab1-a516-996ea3dafb72}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "AuthService.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\AuthService.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Services\\AuthService.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\AuthService.cs",
+              "RelativeToolTip": "project_vc#\\Services\\AuthService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.302Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "JwtUtil.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\JwtUtil.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Services\\JwtUtil.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\JwtUtil.cs",
+              "RelativeToolTip": "project_vc#\\Services\\JwtUtil.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.304Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "RegisterController.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Controllers\\RegisterController.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Controllers\\RegisterController.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Controllers\\RegisterController.cs",
+              "RelativeToolTip": "project_vc#\\Controllers\\RegisterController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.307Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "Manufacturer.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\Manufacturer.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Models\\Manufacturer.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\Manufacturer.cs",
+              "RelativeToolTip": "project_vc#\\Models\\Manufacturer.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.31Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\appsettings.json",
+              "RelativeDocumentMoniker": "project_vc#\\appsettings.json",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\appsettings.json",
+              "RelativeToolTip": "project_vc#\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAA5AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-02-04T07:04:20.318Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "InvoiceService.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\InvoiceService.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Services\\InvoiceService.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\InvoiceService.cs",
+              "RelativeToolTip": "project_vc#\\Services\\InvoiceService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.266Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "EmailService.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\EmailService.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Services\\EmailService.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Services\\EmailService.cs",
+              "RelativeToolTip": "project_vc#\\Services\\EmailService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.3Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "InvoiceHeader.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\InvoiceHeader.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Models\\InvoiceHeader.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\InvoiceHeader.cs",
+              "RelativeToolTip": "project_vc#\\Models\\InvoiceHeader.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.312Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "launchSettings.json",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Properties\\launchSettings.json",
+              "RelativeDocumentMoniker": "project_vc#\\Properties\\launchSettings.json",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Properties\\launchSettings.json",
+              "RelativeToolTip": "project_vc#\\Properties\\launchSettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAPAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-02-04T07:04:20.315Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Program.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Program.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Program.cs",
+              "RelativeToolTip": "project_vc#\\Program.cs",
+              "ViewState": "AgIAAGsAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.321Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "ApplicationDbContext.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Data\\ApplicationDbContext.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Data\\ApplicationDbContext.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Data\\ApplicationDbContext.cs",
+              "RelativeToolTip": "project_vc#\\Data\\ApplicationDbContext.cs",
+              "ViewState": "AgIAABoAAAAAAAAAAAAmwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.324Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "InvoiceDetail.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\InvoiceDetail.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Models\\InvoiceDetail.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\InvoiceDetail.cs",
+              "RelativeToolTip": "project_vc#\\Models\\InvoiceDetail.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.327Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "CompType.cs",
+              "DocumentMoniker": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\CompType.cs",
+              "RelativeDocumentMoniker": "project_vc#\\Models\\CompType.cs",
+              "ToolTip": "D:\\CDAC\\Vehicle Configurator\\.NET\\Backend\\project_vc#\\project_vc#\\Models\\CompType.cs",
+              "RelativeToolTip": "project_vc#\\Models\\CompType.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-04T07:04:20.329Z"
+            }
+          ]
+        },
+        {
+          "DockedWidth": 170,
+          "SelectedChildIndex": -1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{eefa5220-e298-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

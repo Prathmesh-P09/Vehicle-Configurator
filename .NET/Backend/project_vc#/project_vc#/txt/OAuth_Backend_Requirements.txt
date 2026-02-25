@@ -1,0 +1,67 @@
+==========================================
+Backend Files Required for Proper OAuth Implementation
+==========================================
+
+To implement the proper "Client-Side + Backend Verification" OAuth flow (as described in Flow_Explanation.txt), you will need the following files. 
+
+Some already exist and need modification, while others are new.
+
+------------------------------------------
+1. DTO (Data Transfer Object) - [NEW]
+------------------------------------------
+File: DTOs/GoogleLoginRequest.cs
+
+Purpose: defines the data structure sent by the frontend.
+Content:
+- A class containing the token string.
+
+Example:
+public class GoogleLoginRequest
+{
+    public string Token { get; set; }
+}
+
+------------------------------------------
+2. Controller - [MODIFY]
+------------------------------------------
+File: Controllers/AuthController.cs
+
+Purpose: Exposes the endpoint for the frontend to call.
+Changes Needed:
+- Add a new API endpoint `[HttpPost("google-login")]`.
+- This endpoint should accept `GoogleLoginRequest`.
+- It should call the `AuthService.GoogleLogin` method.
+- It should return the app's JWT token on success.
+
+------------------------------------------
+3. Service Layer - [MODIFY]
+------------------------------------------
+File: Services/AuthService.cs
+
+Purpose: validation logic and business rules.
+Changes Needed:
+- Interface (`IAuthService`): Add `string GoogleLogin(GoogleLoginRequest request);`
+- Implementation (`AuthService`): 
+    - Add logic to validate the Google Token (using `Google.Apis.Auth`).
+    - Extract the email from the validated payload.
+    - Check if the user exists in `ApplicationDbContext`.
+    - If user exists: Generate JWT.
+    - If user needs registration: Create new `User` entity, save to DB, then generate JWT.
+
+------------------------------------------
+4. Project Configuration - [MODIFY]
+------------------------------------------
+File: project_vc#.csproj
+
+Purpose: Dependencies.
+Changes Needed:
+- You must install the Google Auth library via NuGet.
+- Command: `dotnet add package Google.Apis.Auth`
+
+------------------------------------------
+Summary of Files
+------------------------------------------
+1. DTOs/GoogleLoginRequest.cs  (New)
+2. Controllers/AuthController.cs (Modify)
+3. Services/AuthService.cs (Modify)
+4. project_vc#.csproj (Modify - Add Dependency)

@@ -1,0 +1,245 @@
+[
+  {
+    "ContainingType": "Program\u002B\u003C\u003Ec",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_2",
+    "RelativePath": "",
+    "HttpMethod": "GET",
+    "IsController": false,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Void",
+        "MediaTypes": [],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.RegisterController",
+    "Method": "Register",
+    "RelativePath": "api/auth/register",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "VehicleConfigurator.ConsoleApp.DTOs.RegisterDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.DefaultConfigController",
+    "Method": "GetDefaults",
+    "RelativePath": "api/default-config/{modelId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "modelId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.InvoiceController",
+    "Method": "ConfirmOrder",
+    "RelativePath": "api/invoice/confirm",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "VehicleConfigurator.ConsoleApp.DTOs.InvoiceRequestDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.ModelController",
+    "Method": "GetModelDetails",
+    "RelativePath": "api/models/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.WelcomeController",
+    "Method": "GetManufacturers",
+    "RelativePath": "api/welcome/manufacturers/{segId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "segId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.WelcomeController",
+    "Method": "GetModels",
+    "RelativePath": "api/welcome/models",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "segId",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "mfgId",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.WelcomeController",
+    "Method": "GetSegments",
+    "RelativePath": "api/welcome/segments",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.AuthController",
+    "Method": "Login",
+    "RelativePath": "auth/login",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "VehicleConfigurator.ConsoleApp.DTOs.LoginDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.OAuthController",
+    "Method": "GoogleAuth",
+    "RelativePath": "oauth2/authorization/google",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.OAuthController",
+    "Method": "RedirectCallback",
+    "RelativePath": "oauth2/redirect",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "code",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.VehicleDetailController",
+    "Method": "GetAllModels",
+    "RelativePath": "vehicaldetail/models",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.VehicleConfigController",
+    "Method": "GetAccessories",
+    "RelativePath": "vehicle/{modelId}/accessories",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "modelId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.VehicleConfigController",
+    "Method": "GetExterior",
+    "RelativePath": "vehicle/{modelId}/exterior",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "modelId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.VehicleConfigController",
+    "Method": "GetInterior",
+    "RelativePath": "vehicle/{modelId}/interior",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "modelId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "VehicleConfigurator.ConsoleApp.Controllers.VehicleConfigController",
+    "Method": "GetStandard",
+    "RelativePath": "vehicle/{modelId}/standard",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "modelId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  }
+]

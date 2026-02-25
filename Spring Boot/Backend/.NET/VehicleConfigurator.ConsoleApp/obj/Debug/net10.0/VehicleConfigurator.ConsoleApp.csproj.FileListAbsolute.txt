@@ -1,0 +1,5 @@
+D:\CDAC\Vehicle Configurator\Backend\.NET\VehicleConfigurator.ConsoleApp\obj\Debug\net10.0\VehicleConfigurator.ConsoleApp.csproj.AssemblyReference.cache
+D:\CDAC\Vehicle Configurator\Backend\.NET\VehicleConfigurator.ConsoleApp\obj\Debug\net10.0\VehicleConfigurator.ConsoleApp.GeneratedMSBuildEditorConfig.editorconfig
+D:\CDAC\Vehicle Configurator\Backend\.NET\VehicleConfigurator.ConsoleApp\obj\Debug\net10.0\VehicleConfigurator.ConsoleApp.AssemblyInfoInputs.cache
+D:\CDAC\Vehicle Configurator\Backend\.NET\VehicleConfigurator.ConsoleApp\obj\Debug\net10.0\VehicleConfigurator.ConsoleApp.AssemblyInfo.cs
+D:\CDAC\Vehicle Configurator\Backend\.NET\VehicleConfigurator.ConsoleApp\obj\Debug\net10.0\VehicleConfigurator.ConsoleApp.csproj.CoreCompileInputs.cache

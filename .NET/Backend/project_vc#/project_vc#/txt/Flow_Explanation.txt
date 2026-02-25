@@ -1,0 +1,77 @@
+==========================================
+SignIn and OAuth Flow Explanation
+==========================================
+
+This document outlines the authentication flows for the Vehicle Configurator application.
+
+------------------------------------------
+1. Manual Sign-In Flow (Username/Password)
+------------------------------------------
+
+This flow is used when a user logs in with their credentials directly.
+
+Frontend Process (SignIn.jsx / EnhancedSignIn.jsx)
+1. User Input: The user enters their `username` and `password`.
+2. Submission: When the form is submitted, `handleSubmit` is triggered.
+3. API Request: The frontend sends a `POST` request to `/auth/login` (proxied or direct to `http://localhost:8080/auth/login`).
+   * Body: JSON object `{ "username": "...", "password": "..." }`.
+4. Response Handling:
+   * Success (200 OK): The backend returns a JWT token string.
+     * The frontend stores this token in `localStorage.setItem("token", token)`.
+     * The user is redirected to the dashboard (`/dashboard` or `redirectTo`).
+   * Failure: Displays an error message (e.g., "Invalid credentials").
+
+Backend Process (AuthController.cs, AuthService.cs)
+1. Endpoint: `AuthController` listens on `POST /auth/login`.
+2. Validation (`AuthService.Login`):
+   * Finds the user by `username` in the database (`ApplicationDbContext`).
+   * Checks if the user is `null` or `IsBlocked`.
+   * Password Verification: Uses `BCrypt.Net.BCrypt.Verify` to compare the provided password with the stored hash.
+     * If invalid: Increments `FailedAttempts`. Blocks user if attempts >= 3.
+   * Success: Resets `FailedAttempts` to 0.
+3. Token Generation: Calls `JwtUtil.GenerateToken` to create a signed JWT containing the username.
+4. Response: Returns the JWT token string to the client.
+
+------------------------------------------
+2. Proper OAuth Flow (Client-Side + Backend Verification)
+------------------------------------------
+
+This is the recommended standard flow for this application, utilizing Google Identity Services on the frontend and explicit verification on the .NET backend.
+
+Step 1: Client-Side Authentication (Frontend)
+1. Initialization: The extracted component `EnhancedSignIn.jsx` loads the Google script (`https://accounts.google.com/gsi/client`).
+2. User Action: The user clicks the "Sign in with Google" button.
+3. Google Interaction: A Google popup appears. The user logs in and consents to share their email/profile.
+4. Token Validated (Google -> Frontend): Google returns a secure `ID Token` (JWT) directly to the browser via the `handleGoogleCallback` function.
+   * NOTE: This token proves the user's identity to the *Client*, but the Backend must also verify it independently.
+
+Step 2: Token Verification & Session Creation (Backend)
+1. API Call: The frontend sends this ID Token to the backend.
+   * Request: `POST /auth/google-login`
+   * Body: `{ "token": "eyJhbGciOiJSUzI1NiIs..." }`
+2. ID Token Validation:
+   * The Backend receives the token.
+   * It MUST verify the token's signature using Google's public keys (using `Google.Apis.Auth` library).
+   * It verifies the `aud` (Audience) claim matches the app's Client ID.
+   * If valid, the token is trusted, and the user's email is extracted from the payload.
+3. User Lookup / Auto-Registration:
+   * The Backend checks the database for a user with this email.
+   * IF User Exists: Proceed to login.
+   * IF User Does Not Exist: Automatically create a new user record with the email and name from the token.
+4. App Session:
+   * The Backend generates its OWN internal JWT (Access Token) for the user.
+   * This ensures the app session is managed by the app's own rules, not dependent on the Google token's short lifespan.
+
+Step 3: Completion
+1. Response: The Backend returns the internal JWT to the Frontend.
+2. Storage: Frontend stores the JWT in `localStorage`.
+3. Redirect: Frontend redirects the user to `/dashboard`.
+
+------------------------------------------
+Implementation Notes for Developer
+------------------------------------------
+The current code dump shows a "Hybrid" attempt where the frontend tries to use the manual `/auth/login` endpoint for Google logins by sending a dummy password. This is INSECURE and incomplete.
+
+To implement the "Proper" flow described above, you must:
+1. Update `AuthController.cs` to add a `[HttpPost("google-login")]` endpoint.
+2. Update `AuthService.cs` to include logic that validates the Google Token and bypasses password checks for verified Google users.

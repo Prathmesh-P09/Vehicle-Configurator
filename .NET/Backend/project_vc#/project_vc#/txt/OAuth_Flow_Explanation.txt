@@ -1,0 +1,88 @@
+==========================================
+SSO OAuth Flow Explanation
+==========================================
+
+This document outlines the authentication flow, explicitly mentioning the files responsible for each step.
+
+Files Involved:
+- **Frontend**: `src/pages/EnhancedSignIn.jsx`
+- **Frontend**: `src/pages/OAuthHandler.jsx`
+- **Backend**: `Controllers/AuthController.cs`
+- **Backend**: `Services/AuthService.cs`
+- **Backend**: `Program.cs`
+
+------------------------------------------
+1. Frontend Initialization & User Action
+------------------------------------------
+**File**: `src/pages/EnhancedSignIn.jsx`
+
+1.  **Load Google Script**: The component loads the Google Identity Services script.
+2.  **Initialize**: Inside `useEffect`, it calls `google.accounts.id.initialize`.
+    *   It binds the callback function `handleGoogleCallback` to handle the response from Google.
+3.  **Render Button**: It renders the "Sign in with Google" button in the UI.
+
+------------------------------------------
+2. User Authenticates with Google
+------------------------------------------
+**Action**: User clicks the button and logs in via the Google Popup.
+**Result**: Google returns a `credential` (ID Token).
+
+------------------------------------------
+3. Frontend Handles Google Response
+------------------------------------------
+**File**: `src/pages/EnhancedSignIn.jsx`
+**Function**: `handleGoogleCallback(response)`
+
+1.  **Extract Token**: The code decodes the Google ID Token (`response.credential`) to get the user's email.
+2.  **Send to Backend**: It sends a POST request to the backend API.
+    *   **URL**: `/auth/login`
+    *   **Payload**: `{ "username": "user@email.com", "password": "CHECK_USER" }`
+    *   *Note: This "CHECK_USER" password is a specific signal used in this implementation.*
+
+------------------------------------------
+4. Backend Processes Login Request
+------------------------------------------
+**File**: `Controllers/AuthController.cs`
+**Method**: `Login([FromBody] LoginRequest request)`
+
+1.  **Receive Request**: The controller receives the JSON payload.
+2.  **Call Service**: It calls `_service.Login(request)` to validate the user.
+
+------------------------------------------
+5. Backend Validates Credentials (The Gap)
+------------------------------------------
+**File**: `Services/AuthService.cs`
+**Method**: `Login(LoginRequest request)`
+
+1.  **Find User**: It looks up the user by `request.Username` in the database.
+2.  **Verify Password**:
+    *   **Current Logic**: It attempts to verify `request.Password` ("CHECK_USER") against the hashed password in the DB.
+    *   **Issue**: This will fail because "CHECK_USER" is not the user's actual password.
+    *   **Required Fix**: You need to modify this file to detect if `password == "CHECK_USER"` (or better, use a Google Token validation library) and bypass the password hash check if the request is trusted.
+
+------------------------------------------
+6. Token Generation & Response
+------------------------------------------
+**File**: `Services/AuthService.cs` (if successful)
+
+1.  **Generate Token**: Calls `_jwtUtil.GenerateToken(user.Username)` to create an App JWT.
+2.  **Return**: The `AuthController` returns this token to the frontend.
+
+------------------------------------------
+7. Final Frontend Completion
+------------------------------------------
+**File**: `src/pages/EnhancedSignIn.jsx`
+
+1.  **Receive Token**: `handleGoogleCallback` receives the text response (the JWT).
+2.  **Store Token**: `localStorage.setItem("token", responseText)`.
+3.  **Redirect**: `navigate(redirectTo)` moves the user to the Dashboard.
+
+------------------------------------------
+Alternative Flow: Redirect (OAuthHandler)
+------------------------------------------
+**File**: `src/pages/OAuthHandler.jsx`
+
+If you use the backend-redirect method (e.g., clicking "Sign in with Google (Redirect)" button):
+1.  Backend redirects user to Google.
+2.  Google redirects back to `http://localhost:5173/oauth2/redirect`.
+3.  **OAuthHandler.jsx** picks up the `?token=...` from the URL, saves it to `localStorage`, and redirects to `/welcome`.

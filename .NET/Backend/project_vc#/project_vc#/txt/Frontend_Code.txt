@@ -1,0 +1,475 @@
+==========================================
+File: src/pages/SignIn.jsx
+==========================================
+import React, { useState } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+
+const SignIn = () => {
+  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { toast } = useToast();
+
+  const redirectTo = location.state?.redirectTo || "/dashboard";
+
+  /* =========================
+     MANUAL SIGN-IN (JWT)
+  ========================= */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      const response = await fetch("http://localhost:8080/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        const token = await response.text();
+        localStorage.setItem("token", token);
+
+        toast({ title: "Login successful" });
+        navigate(redirectTo, { replace: true });
+      } else {
+        const msg = await response.text();
+        setError(msg || "Invalid credentials");
+      }
+    } catch (err) {
+      setError("Backend not reachable (http://localhost:8080)");
+    }
+  };
+
+  /* =========================
+     GOOGLE LOGIN 
+  ========================= */
+  const handleGoogleLogin = () => {
+
+    window.location.href =
+      "http://localhost:8080/oauth2/authorization/google";
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="bg-white p-8 rounded-xl shadow-md w-[420px] text-center">
+        <div className="mb-4 text-blue-600 text-4xl">🚗</div>
+
+        <h2 className="text-2xl font-bold mb-2">Sign In</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Access your vehicle configuration dashboard
+        </p>
+
+        {error && (
+          <div className="bg-red-100 text-red-700 p-2 rounded mb-4 text-sm border border-red-200">
+            {error}
+          </div>
+        )}
+
+        {/* MANUAL LOGIN */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            className="w-full p-2 border rounded bg-gray-50 focus:outline-blue-500"
+            type="text"
+            placeholder="Username or Email"
+            value={formData.username}
+            onChange={(e) =>
+              setFormData({ ...formData, username: e.target.value })
+            }
+            required
+          />
+
+          <input
+            className="w-full p-2 border rounded bg-gray-50 focus:outline-blue-500"
+            type="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={(e) =>
+              setFormData({ ...formData, password: e.target.value })
+            }
+            required
+          />
+
+          <button
+            type="submit"
+            className="w-full bg-black text-white p-2 rounded hover:bg-gray-800 transition"
+          >
+            Sign In
+          </button>
+        </form>
+
+        <p className="mt-4 text-sm text-gray-600">
+          Don’t have an account?{" "}
+          <Link to="/register" className="text-blue-600 hover:underline">
+            Register here
+          </Link>
+        </p>
+
+        {/* OR DIVIDER */}
+        <div className="relative flex items-center justify-center py-6">
+          <div className="flex-grow border-t border-gray-300" />
+          <span className="mx-4 text-gray-400 text-xs uppercase">or</span>
+          <div className="flex-grow border-t border-gray-300" />
+        </div>
+
+        {/* GOOGLE LOGIN */}
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full flex items-center justify-center gap-2 border border-gray-300 p-2 rounded hover:bg-gray-100 transition"
+        >
+          <img
+            src="https://developers.google.com/identity/images/g-logo.png"
+            alt="Google"
+            className="w-5 h-5"
+          />
+          Continue with Google
+        </button>
+        <button
+          onClick={() =>
+            window.location.href =
+            "http://localhost:8080/oauth2/authorization/facebook"
+          }
+          className="w-full mt-3 bg-blue-700 text-white py-2 rounded hover:bg-blue-800"
+        >
+          Continue with Facebook
+        </button>
+
+      </div>
+    </div>
+  );
+};
+
+export default SignIn;
+
+==========================================
+File: src/pages/EnhancedSignIn.jsx
+==========================================
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import { motion } from "framer-motion";
+import { Car, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+
+const EnhancedSignIn = () => {
+  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = location.state?.redirectTo || "/dashboard";
+  const { toast } = useToast();
+
+  const decodeNameFromToken = (t) => {
+    try {
+      const payload = t.split(".")[1];
+      const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const p = JSON.parse(window.atob(base64));
+      return p.name || p.email || p.sub || p.username || null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /* Google Sign-In Handler */
+  const handleGoogleCallback = async (response) => {
+    try {
+      const googleToken = response.credential;
+      const base64Url = googleToken.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(window.atob(base64));
+      const email = payload.email;
+
+      const checkResponse = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: email, password: "CHECK_USER" }),
+      });
+
+      const responseText = await checkResponse.text();
+
+      if (checkResponse.ok) {
+        localStorage.setItem("token", responseText);
+        const name = decodeNameFromToken(responseText) || payload.name;
+        toast({ title: `Welcome back${name ? `, ${name}` : ""}` });
+        navigate(redirectTo);
+      } else if (responseText.includes("Invalid Username")) {
+        navigate("/register", {
+          state: {
+            message: "User not found. Please register first.",
+            prefillEmail: email,
+            prefillName: payload.name,
+          },
+        });
+      } else if (responseText.includes("Invalid password")) {
+        localStorage.setItem("token", googleToken);
+        const name = payload.name || payload.email;
+        toast({ title: `Welcome back${name ? `, ${name}` : ""}` });
+        navigate(redirectTo);
+      } else {
+        setError(responseText || "Authentication failed.");
+      }
+    } catch (err) {
+      setError("Network Error: Is backend running on port 8080?");
+    }
+  };
+
+  useEffect(() => {
+    if (window.google) {
+      google.accounts.id.initialize({
+        client_id:
+          "222979075637-d9igm3vq8b1kdprbf9pr9ab18q53jf37.apps.googleusercontent.com",
+        callback: handleGoogleCallback,
+      });
+
+      google.accounts.id.renderButton(document.getElementById("googleBtn"), {
+        theme: "outline",
+        size: "large",
+        width: "360",
+      });
+    }
+  }, []);
+
+  /* Manual Sign-In */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        const token = await response.text();
+        localStorage.setItem("token", token);
+        const name = decodeNameFromToken(token);
+        toast({ title: `Welcome back${name ? `, ${name}` : ""}` });
+        navigate(redirectTo);
+      } else {
+        const errMsg = await response.text();
+        setError(errMsg || "Invalid Credentials");
+      }
+    } catch (err) {
+      setError("Connection error. Check backend.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col lg:flex-row min-h-screen">
+      {/* Left Side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-12 items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjEiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-30"></div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="relative z-10 text-white"
+        >
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+              <Car className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold">VehicleConfig</h1>
+          </div>
+          <h2 className="text-4xl font-bold mb-4">
+            Welcome back to your configuration hub
+          </h2>
+          <p className="text-blue-100 text-lg">
+            Access your vehicle configurations, manage invoices, and collaborate
+            with your team seamlessly.
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-200">
+            {/* Mobile Logo */}
+            <div className="flex lg:hidden items-center justify-center gap-2 mb-6">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center">
+                <Car className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-xl font-bold">VehicleConfig</span>
+            </div>
+
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Sign In</h2>
+              <p className="text-gray-600">
+                Welcome back! Please enter your details
+              </p>
+            </div>
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
+              </motion.div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Enter your username"
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData({ ...formData, username: e.target.value })
+                  }
+                  className="h-12"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                    className="h-12 pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Signing In...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6">
+              <p className="text-center text-sm text-gray-600">
+                Don't have an account?{" "}
+                <Link
+                  to="/register"
+                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                >
+                  Register here
+                </Link>
+              </p>
+            </div>
+
+            <div className="relative my-6">
+              <Separator />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-4 text-sm text-gray-500">
+                Or continue with
+              </span>
+            </div>
+
+            <div id="googleBtn" className="flex justify-center"></div>
+
+            {/* Help / Fallback */}
+            <div className="mt-4 text-sm text-gray-600 text-center">
+              <p>
+                Page origin: <code className="bg-gray-100 px-2 py-1 rounded">{window.location.origin}</code>
+              </p>
+              <p className="mt-2">
+                Google Client ID: <code className="bg-gray-100 px-2 py-1 rounded">222979075637-d9igm3vq8b1kdprbf9pr9ab18q53jf37.apps.googleusercontent.com</code>
+              </p>
+
+              <p className="mt-2">
+                If Google sign-in is blocked (origin_mismatch) add the origin above to your
+                OAuth Client in Google Cloud Console and ensure the redirect URI your backend uses is also registered there (example: http://localhost:8080/oauth2/redirect).
+              </p>
+
+              <div className="mt-2 flex gap-2 justify-center">
+                <button
+                  onClick={() => (window.location.href = "http://localhost:8080/auth/oauth")}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Sign in with Google (Redirect)
+                </button>
+                <button
+                  onClick={() =>
+                    window.alert(
+                      "Open Google Cloud Console → Credentials → OAuth 2.0 Client IDs → Add this origin: " +
+                        window.location.origin,
+                    )
+                  }
+                  className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                >
+                  Show setup help
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+export default EnhancedSignIn;
+
+==========================================
+File: src/pages/OAuthHandler.jsx
+==========================================
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function OAuthHandler() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token && token.startsWith("ey")) {
+      localStorage.setItem("token", token);
+      navigate("/welcome");
+    } else {
+      navigate("/signin");
+    }
+  }, [navigate]);
+
+  return <p>Signing you in...</p>;
+}

@@ -1,0 +1,160 @@
+==========================================
+File: Controllers/AuthController.cs
+==========================================
+using Microsoft.AspNetCore.Mvc;
+using project_vc_.DTOs;
+using project_vc_.Services;
+
+namespace project_vc_.Controllers;
+
+[ApiController]
+[Route("auth")]
+public class AuthController : ControllerBase
+{
+    private readonly IAuthService _service;
+
+    public AuthController(IAuthService service)
+    {
+        _service = service;
+    }
+
+    [HttpPost("login")]
+    public IActionResult Login([FromBody] LoginRequest request)
+    {
+        try
+        {
+            var token = _service.Login(request);
+            return Ok(token); 
+        }
+        catch (Exception ex)
+        {
+            return Unauthorized(ex.Message);
+        }
+    }
+}
+
+==========================================
+File: Services/AuthService.cs
+==========================================
+using project_vc_.Models;
+using project_vc_.DTOs;
+using project_vc_.Data;
+using BCrypt.Net;
+
+namespace project_vc_.Services;
+
+public interface IAuthService
+{
+    string Login(LoginRequest request);
+}
+
+public class AuthService : IAuthService
+{
+    private readonly ApplicationDbContext _context;
+    private readonly JwtUtil _jwtUtil;
+
+    public AuthService(ApplicationDbContext context, JwtUtil jwtUtil)
+    {
+        _context = context;
+        _jwtUtil = jwtUtil;
+    }
+
+    public string Login(LoginRequest request)
+    {
+        var user = _context.Users.FirstOrDefault(u => u.Username == request.Username);
+        if (user == null)
+        {
+            throw new Exception("Invalid username or password");
+        }
+
+        if (user.IsBlocked)
+        {
+            throw new Exception("User is blocked");
+        }
+
+        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
+        {
+            user.FailedAttempts++;
+            if (user.FailedAttempts >= 3)
+            {
+                user.IsBlocked = true;
+            }
+            _context.SaveChanges();
+            throw new Exception("Invalid username or password");
+        }
+
+        user.FailedAttempts = 0;
+        _context.SaveChanges();
+
+        return _jwtUtil.GenerateToken(user.Username!);
+    }
+}
+
+==========================================
+File: DTOs/LoginRequest.cs
+==========================================
+namespace project_vc_.DTOs;
+
+public class LoginRequest
+{
+    public string? Username { get; set; }
+    public string? Password { get; set; }
+}
+
+==========================================
+File: Program.cs (Relevant Sections)
+==========================================
+// ... (Imports omitted for brevity)
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+
+        // ...
+
+        // Auth / JWT Configuration
+        var jwtKey = builder.Configuration["Jwt:Secret"] ?? "default_secret_key_long_enough";
+        var key = Encoding.ASCII.GetBytes(jwtKey);
+
+        builder.Services.AddAuthentication(x =>
+        {
+            x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddJwtBearer(x =>
+        {
+            x.RequireHttpsMetadata = false;
+            x.SaveToken = true;
+            x.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = false, 
+                ValidateAudience = false 
+            };
+        });
+
+        // ...
+        
+        builder.Services.AddScoped<AwsS3Service>();
+        builder.Services.AddScoped<IAuthService, AuthService>();
+        // ...
+
+        builder.Services.AddControllers();
+        
+        // ...
+
+        var app = builder.Build();
+
+        // ...
+
+        app.UseCors("AllowAll");
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+
+        app.Run();
+    }
+}

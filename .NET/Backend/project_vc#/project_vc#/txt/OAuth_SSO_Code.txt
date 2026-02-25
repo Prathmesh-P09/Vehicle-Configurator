@@ -1,0 +1,114 @@
+================================================================================
+FRONTEND: EnhancedSignIn.jsx
+LOCATION: D:\CDAC\Vehicle Configurator\Frontend\FinalVconfigUi\src\pages\EnhancedSignIn.jsx
+================================================================================
+import React, { useState, useEffect } from "react";
+// ... (imports)
+
+const EnhancedSignIn = () => {
+  // ... (state)
+
+  /* Google Sign-In Handler */
+  const handleGoogleCallback = async (response) => {
+    try {
+      const googleToken = response.credential;
+      const base64Url = googleToken.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const payload = JSON.parse(window.atob(base64));
+      const email = payload.email;
+
+      // NOTE: Sender uses a "Hybrid" approach, verify backend supports this!
+      const checkResponse = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: email, password: "CHECK_USER" }),
+      });
+      // ... (rest of logic)
+    } catch (err) {
+      setError("Network Error: Is backend running on port 8080?");
+    }
+  };
+
+  useEffect(() => {
+    if (window.google) {
+      google.accounts.id.initialize({
+        client_id: "222979075637-d9igm3vq8b1kdprbf9pr9ab18q53jf37.apps.googleusercontent.com",
+        callback: handleGoogleCallback,
+      });
+      // ...
+    }
+  }, []);
+
+  // ... (rest of component)
+};
+export default EnhancedSignIn;
+
+================================================================================
+FRONTEND: OAuthHandler.jsx
+LOCATION: D:\CDAC\Vehicle Configurator\Frontend\FinalVconfigUi\src\pages\OAuthHandler.jsx
+================================================================================
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function OAuthHandler() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token && token.startsWith("ey")) {
+      localStorage.setItem("token", token);
+      navigate("/welcome");
+    } else {
+      navigate("/signin");
+    }
+  }, [navigate]);
+
+  return <p>Signing you in...</p>;
+}
+
+================================================================================
+BACKEND: Program.cs (Relevant Auth Config)
+LOCATION: D:\CDAC\Vehicle Configurator\.NET\Backend\project_vc#\project_vc#\Program.cs
+================================================================================
+// ...
+var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Secret"]);
+
+builder.Services.AddAuthentication(x =>
+{
+    x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(x =>
+{
+    x.RequireHttpsMetadata = false;
+    x.SaveToken = true;
+    x.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false, 
+        ValidateAudience = false 
+    };
+});
+// ...
+app.UseAuthentication();
+app.UseAuthorization();
+
+================================================================================
+BACKEND: AuthController.cs
+LOCATION: D:\CDAC\Vehicle Configurator\.NET\Backend\project_vc#\project_vc#\Controllers\AuthController.cs
+================================================================================
+[HttpPost("login")]
+public IActionResult Login([FromBody] LoginRequest request)
+{
+    try
+    {
+        var token = _service.Login(request);
+        return Ok(token); 
+    }
+    catch (Exception ex)
+    {
+        return Unauthorized(ex.Message);
+    }
+}
