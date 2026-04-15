@@ -1,0 +1,40 @@
+# ==== Java / Spring Boot ====
+# Build output
+**/target/
+*.jar
+*.war
+*.ear
+*.zip
+
+# Eclipse IDE
+.metadata/
+*.class
+.project
+.classpath
+.settings/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Maven/Gradle
+*.log
+.mvn/
+
+# ==== .NET ====
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.cache
+.vs/
+
+# ==== Node / Frontend ====
+**/node_modules/
+
+# ==== OS Files ====
+Thumbs.db
+.DS_Store
